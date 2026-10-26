@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "lib": ["ES2022"]
+  },
+  "references": [
+    { "path": "../workflow-core" },
+    { "path": "../berkas" },
+    { "path": "../evomedis-client" }
+  ],
+  "include": ["src/**/*.ts"],
+  "exclude": ["**/*.test.ts", "dist"]
+}

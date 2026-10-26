@@ -1,0 +1,23 @@
+{
+  "name": "@simrs-flow/evomedis-client",
+  "version": "0.1.0",
+  "description": "Typed, safety-gated HTTP client for EvoMedis/SIMRS. Endpoint registry, session handling, parsers, and mutation guards.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "src"],
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@simrs-flow/audit-ledger": "0.1.0",
+    "@simrs-flow/workflow-core": "0.1.0"
+  }
+}

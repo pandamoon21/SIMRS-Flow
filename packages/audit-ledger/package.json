@@ -1,0 +1,26 @@
+{
+  "name": "@simrs-flow/audit-ledger",
+  "version": "0.1.0",
+  "description": "Append-only run/event ledger with PHI/credential redaction. JSONL-backed for local MVP.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./redaction": {
+      "types": "./dist/redaction.d.ts",
+      "import": "./dist/redaction.js"
+    }
+  },
+  "files": ["dist", "src"],
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@simrs-flow/workflow-core": "0.1.0"
+  }
+}

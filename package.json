@@ -1,0 +1,33 @@
+{
+  "name": "simrs-flow",
+  "version": "0.1.0",
+  "private": true,
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "description": "Production-ready React Flow rewrite of the EvoMedis/SIMRS automation helper (rawat jalan + rawat inap), with an event-driven headless workflow engine, typed API client, audit ledger, and orchestrator API.",
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "eslint . --ext .ts,.tsx",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "dev:orchestrator": "npm run dev --workspace @simrs-flow/orchestrator",
+    "dev:ui": "npm run dev --workspace @simrs-flow/ui",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\""
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@typescript-eslint/eslint-plugin": "^7.13.0",
+    "@typescript-eslint/parser": "^7.13.0",
+    "eslint": "^8.57.0",
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.0"
+  }
+}

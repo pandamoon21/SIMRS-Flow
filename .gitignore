@@ -1,0 +1,76 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Build output
+dist/
+build/
+out/
+*.tsbuildinfo
+# Compiled output emitted next to source (tsc -b) — never commit these
+packages/*/src/**/*.js
+packages/*/src/**/*.js.map
+packages/*/src/**/*.d.ts
+packages/*/src/**/*.d.ts.map
+apps/*/src/**/*.js.map
+apps/*/src/**/*.d.ts
+
+# Test / coverage
+coverage/
+.vitest/
+*.lcov
+
+# Environment & secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+secrets/
+credentials.json
+
+# Runtime data
+*.sqlite
+*.sqlite-journal
+*.db
+runs/
+*.jsonl
+!**/fixtures/**/*.jsonl
+!**/examples/**/*.jsonl
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# Vite
+.vite/
+apps/ui/dist/
+
+# Misc
+.cache/
+tmp/
+
+# Agent worktrees + throwaway browser profiles captured during debugging
+.claude/worktrees/
+**/chrome-profile*/
+
+# Local agent / tool artifacts
+.codebase-memory/
+.omc/
+.omo/
+.data/
+
+# Portable production build output (scripts/build-portable.ps1)
+.portable/
+
+# Site-specific portable settings (real SIMRS / sheet URLs)
+scripts/portable/config.local.env

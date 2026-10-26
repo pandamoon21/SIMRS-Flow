@@ -1,0 +1,35 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "composite": true,
+    "incremental": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "baseUrl": ".",
+    "paths": {
+      "@simrs-flow/workflow-core": ["./packages/workflow-core/src/index.ts"],
+      "@simrs-flow/audit-ledger": ["./packages/audit-ledger/src/index.ts"],
+      "@simrs-flow/berkas/evaluate": ["./packages/berkas/src/evaluate.ts"],
+      "@simrs-flow/berkas": ["./packages/berkas/src/index.ts"],
+      "@simrs-flow/audit-ledger/redaction": ["./packages/audit-ledger/src/redaction.ts"],
+      "@simrs-flow/evomedis-client": ["./packages/evomedis-client/src/index.ts"],
+      "@simrs-flow/domain-ranap": ["./packages/domain-ranap/src/index.ts"],
+      "@simrs-flow/domain-rajal": ["./packages/domain-rajal/src/index.ts"],
+      "@simrs-flow/test-fixtures": ["./packages/test-fixtures/src/index.ts"]
+    }
+  }
+}

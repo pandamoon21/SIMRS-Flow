@@ -1,0 +1,29 @@
+{
+  "name": "@simrs-flow/berkas",
+  "version": "0.1.0",
+  "description": "Reads e-klaim bundle PDFs into per-page document types (text layer first, offline OCR for photo pages).",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./evaluate": {
+      "types": "./dist/evaluate.d.ts",
+      "import": "./dist/evaluate.js"
+    }
+  },
+  "files": ["dist", "src"],
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@tesseract.js-data/eng": "1.0.0",
+    "@tesseract.js-data/ind": "1.0.0",
+    "tesseract.js": "7.0.0",
+    "unpdf": "1.9.1"
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "codex-grid-background",
+        "value": "*",
+        "files": [
+          "apps/ui/src/styles/workflow.css"
+        ],
+        "createdAt": "2026-10-18T15:24:40.336Z",
+        "reason": "Claude (polish pass): flagged rule is .canvas-wrap, the React Flow workflow canvas; the rule itself reserves grid overlays for actual canvas surfaces"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "amiri",
+        "createdAt": "2026-10-18T15:34:46.984Z",
+        "reason": "Claude: Amiri is the documented Arabic face for the login hadits (DESIGN.md Typography, 'Arabic Font'); not a UI type role"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "apps/ui/src/styles/theme.part2.css"
+        ],
+        "createdAt": "2026-10-22T17:57:20.634Z",
+        "reason": "Claude: .pl-card mirrors the existing .tl-block step frame (3px status-coloured left border) in the same log view, so patient cards and step blocks read as one system"
+      }
+    ]
+  }
+}

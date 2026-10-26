@@ -1,0 +1,29 @@
+<!doctype html>
+<!-- data-coreui-theme flips CoreUI's own tokens to their dark values so any
+     component we have not hand-patched (tables, dropdowns, translucent borders)
+     still renders correctly. theme.css loads later and keeps the SIMRS palette. -->
+<html lang="en" data-coreui-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <!-- pleurat type stack: General Sans (Fontshare) + IBM Plex Mono (Google) -->
+    <link rel="preconnect" href="https://api.fontshare.com" crossorigin />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap"
+      rel="stylesheet"
+    />
+    <!-- IBM Plex Mono (data/labels) + Amiri (Arabic hadits on the login screen) -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Amiri:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+    <title>SIMRS-Flow</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

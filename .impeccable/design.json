@@ -1,0 +1,500 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-18T15:33:38.322161+00:00",
+  "title": "Design System: SIMRS-Flow",
+  "extensions": {
+    "colorMeta": {
+      "ledger-ink": {
+        "role": "primary",
+        "displayName": "Ledger Ink",
+        "canonical": "#1d5fd6",
+        "tonalRamp": [
+          "#091e43",
+          "#0f3270",
+          "#15469d",
+          "#1b5aca",
+          "#3573e4",
+          "#6f9cec",
+          "#aec7f4",
+          "#e9effc"
+        ]
+      },
+      "ledger-ink-night": {
+        "role": "primary",
+        "displayName": "Ledger Ink Night",
+        "canonical": "#5aa2ff",
+        "tonalRamp": [
+          "#00214c",
+          "#003880",
+          "#004eb2",
+          "#0064e6",
+          "#1a7eff",
+          "#5ca3ff",
+          "#a3cbff",
+          "#e5f1ff"
+        ]
+      },
+      "ward-paper": {
+        "role": "neutral",
+        "displayName": "Ward Paper",
+        "canonical": "#f6f2e8",
+        "tonalRamp": [
+          "#372d16",
+          "#5c4c24",
+          "#806a32",
+          "#a58841",
+          "#bea25a",
+          "#d1bd8a",
+          "#e5dabd",
+          "#f8f5ed"
+        ]
+      },
+      "paper-surface": {
+        "role": "neutral",
+        "displayName": "Paper Surface",
+        "canonical": "#fbf8f0",
+        "tonalRamp": [
+          "#3c3010",
+          "#65511b",
+          "#8d7126",
+          "#b59130",
+          "#cfaa4a",
+          "#ddc37e",
+          "#ecddb7",
+          "#faf6eb"
+        ]
+      },
+      "paper-raised": {
+        "role": "neutral",
+        "displayName": "Paper Raised",
+        "canonical": "#fffdf6",
+        "tonalRamp": [
+          "#4c3c00",
+          "#806300",
+          "#b28b00",
+          "#e6b300",
+          "#ffcc1a",
+          "#ffdb5c",
+          "#ffeba3",
+          "#fff9e5"
+        ]
+      },
+      "paper-shade": {
+        "role": "neutral",
+        "displayName": "Paper Shade",
+        "canonical": "#f0ebdd",
+        "tonalRamp": [
+          "#352d17",
+          "#584b27",
+          "#7c6a37",
+          "#9f8846",
+          "#b9a160",
+          "#cdbc8e",
+          "#e3dabf",
+          "#f7f5ed"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "#16140e",
+        "tonalRamp": [
+          "#2f2b1e",
+          "#4e4732",
+          "#6d6345",
+          "#8c8059",
+          "#a69973",
+          "#c0b69b",
+          "#dbd6c7",
+          "#f5f4ef"
+        ]
+      },
+      "ink-muted": {
+        "role": "neutral",
+        "displayName": "Ink Muted",
+        "canonical": "#56544a",
+        "tonalRamp": [
+          "#292823",
+          "#45433b",
+          "#605e53",
+          "#7b786a",
+          "#959284",
+          "#b4b1a7",
+          "#d5d3ce",
+          "#f3f3f1"
+        ]
+      },
+      "ink-faint": {
+        "role": "neutral",
+        "displayName": "Ink Faint",
+        "canonical": "#8a887c",
+        "tonalRamp": [
+          "#282824",
+          "#43423c",
+          "#5e5d54",
+          "#79776c",
+          "#939186",
+          "#b2b1a9",
+          "#d4d3cf",
+          "#f3f3f2"
+        ]
+      },
+      "verified-green": {
+        "role": "status",
+        "displayName": "Verified Green",
+        "canonical": "#14803c",
+        "tonalRamp": [
+          "#0a421f",
+          "#116e34",
+          "#189a48",
+          "#1fc65d",
+          "#39e077",
+          "#72e99e",
+          "#b0f3c8",
+          "#e9fcf0"
+        ]
+      },
+      "pending-amber": {
+        "role": "status",
+        "displayName": "Pending Amber",
+        "canonical": "#a06e14",
+        "tonalRamp": [
+          "#442f08",
+          "#714e0e",
+          "#9f6d14",
+          "#cc8c19",
+          "#e6a633",
+          "#edc06e",
+          "#f5dbad",
+          "#fcf5e8"
+        ]
+      },
+      "stop-red": {
+        "role": "status",
+        "displayName": "Stop Red",
+        "canonical": "#be2828",
+        "tonalRamp": [
+          "#3f0d0d",
+          "#691616",
+          "#931f1f",
+          "#be2828",
+          "#d74141",
+          "#e37878",
+          "#efb3b3",
+          "#fbeaea"
+        ]
+      },
+      "review-violet": {
+        "role": "status",
+        "displayName": "Review Violet",
+        "canonical": "#581c87",
+        "tonalRamp": [
+          "#290d3f",
+          "#45166a",
+          "#601f94",
+          "#7c27be",
+          "#9541d8",
+          "#b478e3",
+          "#d5b3ef",
+          "#f3eafb"
+        ]
+      },
+      "night-canvas": {
+        "role": "neutral",
+        "displayName": "Night Canvas",
+        "canonical": "#050711",
+        "tonalRamp": [
+          "#11183b",
+          "#1d2963",
+          "#29398a",
+          "#3449b1",
+          "#4e63cb",
+          "#8190da",
+          "#b8c0ea",
+          "#ebeef9"
+        ]
+      },
+      "night-surface": {
+        "role": "neutral",
+        "displayName": "Night Surface",
+        "canonical": "#0a0e1e",
+        "tonalRamp": [
+          "#131b39",
+          "#202d60",
+          "#2d3e86",
+          "#3950ac",
+          "#536ac6",
+          "#8595d6",
+          "#bac3e8",
+          "#eceef9"
+        ]
+      },
+      "night-shade": {
+        "role": "neutral",
+        "displayName": "Night Shade",
+        "canonical": "#151c30",
+        "tonalRamp": [
+          "#171f35",
+          "#273459",
+          "#36487c",
+          "#465da0",
+          "#5f77b9",
+          "#8d9ecd",
+          "#bfc8e3",
+          "#edf0f7"
+        ]
+      },
+      "night-ink": {
+        "role": "neutral",
+        "displayName": "Night Ink",
+        "canonical": "#efede2",
+        "tonalRamp": [
+          "#312e1b",
+          "#524d2d",
+          "#736b3f",
+          "#948a52",
+          "#ada36b",
+          "#c5be96",
+          "#dedac4",
+          "#f6f5ef"
+        ]
+      },
+      "rule-line": {
+        "role": "neutral",
+        "displayName": "Rule Line",
+        "canonical": "rgba(22, 20, 14, .16)"
+      },
+      "rule-line-soft": {
+        "role": "neutral",
+        "displayName": "Rule Line Soft",
+        "canonical": "rgba(22, 20, 14, .07)"
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Page titles."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Metric values."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Base text and descriptions."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Uppercase mono eyebrows, card and table headers."
+      },
+      "data": {
+        "displayName": "Data",
+        "purpose": "IDs, no. RM, money, timestamps, input values."
+      }
+    },
+    "shadows": [
+      {
+        "name": "card",
+        "value": "0 4px 14px rgba(22, 20, 14, .08)",
+        "purpose": "Resting cards (night: 0 5px 18px rgba(0, 0, 0, .28))."
+      },
+      {
+        "name": "float",
+        "value": "0 12px 30px rgba(22, 20, 14, .12)",
+        "purpose": "Menus and tooltips (night: 0 14px 36px rgba(0, 0, 0, .42))."
+      },
+      {
+        "name": "floating-panel",
+        "value": "0 16px 48px rgba(0, 0, 0, .24)",
+        "purpose": "Movable Run panels above the graph."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-std",
+        "value": "cubic-bezier(.22, 1, .36, 1)",
+        "purpose": "All state transitions."
+      },
+      {
+        "name": "dur-1",
+        "value": ".2s",
+        "purpose": "Colour and border changes."
+      },
+      {
+        "name": "dur-2",
+        "value": ".32s",
+        "purpose": "Card lift."
+      },
+      {
+        "name": "dur-3",
+        "value": ".55s",
+        "purpose": "Larger entrances."
+      },
+      {
+        "name": "lift",
+        "value": "-2px",
+        "purpose": "Hover lift distance."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "phone",
+        "value": "520px"
+      },
+      {
+        "name": "compact",
+        "value": "720px"
+      },
+      {
+        "name": "run-stacked",
+        "value": "900px"
+      },
+      {
+        "name": "command-bar-wrap",
+        "value": "1080px"
+      },
+      {
+        "name": "stack-columns",
+        "value": "1200px"
+      },
+      {
+        "name": "wide",
+        "value": "1800px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Start preview, the active segment, Follow.",
+      "html": "<button class=\"ds-btn-primary\">Start preview</button>",
+      "css": ".ds-btn-primary { font: 600 15px/1.2 'General Sans', system-ui, sans-serif; padding: 12px 22px; color: #f4f8ff; background: #1d5fd6; border: 1px solid #1d5fd6; border-radius: 3px; cursor: pointer; transition: background-color .2s cubic-bezier(.22,1,.36,1), transform .2s cubic-bezier(.22,1,.36,1); } .ds-btn-primary:hover { background: #174fb5; } .ds-btn-primary:active { transform: scale(.98); } .ds-btn-primary:focus-visible { outline: 2px solid #1d5fd6; outline-offset: 2px; box-shadow: 0 0 0 4px rgba(90,162,255,.18); }"
+    },
+    {
+      "name": "Write Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Amber tone for anything that writes to SIMRS: Start confirmed write, Approve.",
+      "html": "<button class=\"ds-btn-write\">Start confirmed write</button>",
+      "css": ".ds-btn-write { font: 600 15px/1.2 'General Sans', system-ui, sans-serif; padding: 12px 22px; color: #211703; background: #a06e14; border: 1px solid #a06e14; border-radius: 3px; cursor: pointer; transition: background-color .2s cubic-bezier(.22,1,.36,1), color .2s cubic-bezier(.22,1,.36,1); } .ds-btn-write:hover { background: #8a5e10; color: #fff8e6; } .ds-btn-write:focus-visible { outline: 2px solid #1d5fd6; outline-offset: 2px; }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Secondary actions: Hide, Refresh, Clear log.",
+      "html": "<button class=\"ds-btn-outline\">Refresh</button>",
+      "css": ".ds-btn-outline { font: 600 12px/1.2 'General Sans', system-ui, sans-serif; padding: 4px 10px; color: #56544a; background: transparent; border: 1px solid rgba(22,20,14,.2); border-radius: 3px; cursor: pointer; transition: color .2s, background-color .2s; } .ds-btn-outline:hover { color: #16140e; background: rgba(22,20,14,.05); } .ds-btn-outline:focus-visible { outline: 2px solid #1d5fd6; outline-offset: 2px; }"
+    },
+    {
+      "name": "Segmented Toggle",
+      "kind": "custom",
+      "refersTo": "button-secondary",
+      "description": "Workflow / source / mode choice; the selected segment fills with ink.",
+      "html": "<div class=\"ds-seg\" role=\"group\"><button class=\"ds-seg-btn is-on\" aria-pressed=\"true\">Fixture replay</button><button class=\"ds-seg-btn\" aria-pressed=\"false\">Live SIMRS</button></div>",
+      "css": ".ds-seg { display: inline-flex; } .ds-seg-btn { font: 600 13px/1.2 'General Sans', system-ui, sans-serif; padding: 6px 14px; color: #16140e; background: #f0ebdd; border: 1px solid rgba(22,20,14,.16); cursor: pointer; transition: background-color .2s, color .2s; } .ds-seg-btn + .ds-seg-btn { margin-left: -1px; } .ds-seg-btn:first-child { border-radius: 3px 0 0 3px; } .ds-seg-btn:last-child { border-radius: 0 3px 3px 0; } .ds-seg-btn:hover { background: #fffdf6; } .ds-seg-btn.is-on { color: #f4f8ff; background: #1d5fd6; border-color: #1d5fd6; } .ds-seg-btn:focus-visible { outline: 2px solid #1d5fd6; outline-offset: 2px; }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Square mono field; the border turns ink on focus.",
+      "html": "<label class=\"ds-field\"><span>No. RM</span><input class=\"ds-input\" placeholder=\"0-90-00-09\"></label>",
+      "css": ".ds-field { display: grid; gap: 6px; font: 400 14px 'General Sans', system-ui, sans-serif; color: #16140e; } .ds-input { font: 400 13px 'IBM Plex Mono', ui-monospace, monospace; padding: 11px 13px; color: rgba(22,20,14,.92); background: rgba(255,253,243,.7); border: 1px solid rgba(22,20,14,.2); border-radius: 0; transition: border-color .2s, background-color .2s; } .ds-input:focus { outline: none; border-color: #1d5fd6; background: #fffdf3; }"
+    },
+    {
+      "name": "Status Chip",
+      "kind": "chip",
+      "refersTo": "status-chip",
+      "description": "Tinted pill with a dot and the status word.",
+      "html": "<span class=\"ds-chip ds-chip-ok\">Selesai</span> <span class=\"ds-chip ds-chip-run\">Berjalan</span> <span class=\"ds-chip ds-chip-warn\">Menunggu</span>",
+      "css": ".ds-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 100px; border: 1px solid; font: 700 10px/1 'IBM Plex Mono', ui-monospace, monospace; letter-spacing: .06em; text-transform: uppercase; } .ds-chip::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .85; } .ds-chip-ok { color: #14532d; background: rgba(20,120,80,.1); border-color: rgba(20,120,80,.38); } .ds-chip-run { color: #1d5fd6; background: rgba(29,95,214,.1); border-color: rgba(29,95,214,.4); } .ds-chip-warn { color: #713f12; background: rgba(160,110,20,.12); border-color: rgba(160,110,20,.42); }"
+    },
+    {
+      "name": "Ledger Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Paper card with a numbered mono header.",
+      "html": "<section class=\"ds-card\"><header class=\"ds-card-head\"><span><b>01 ·</b> Host posture</span><button class=\"ds-card-act\">Refresh</button></header><div class=\"ds-card-body\">Service online · preview mode</div></section>",
+      "css": ".ds-card { border: 1px solid rgba(22,20,14,.16); border-radius: 2px; background: #fffdf6; box-shadow: 0 4px 14px rgba(22,20,14,.08); overflow: hidden; transition: transform .32s cubic-bezier(.22,1,.36,1); } .ds-card:hover { transform: translateY(-2px); } .ds-card-head { display: flex; justify-content: space-between; align-items: center; padding: 10px 18px; background: #f0ebdd; color: #56544a; font: 700 10.8px/1.3 'IBM Plex Mono', ui-monospace, monospace; letter-spacing: .1em; text-transform: uppercase; } .ds-card-head b { color: #1d5fd6; margin-right: 8px; } .ds-card-act { font: 600 12px 'IBM Plex Mono', ui-monospace, monospace; padding: 4px 10px; background: transparent; border: 1px solid rgba(22,20,14,.2); border-radius: 3px; color: #56544a; cursor: pointer; } .ds-card-act:hover { color: #16140e; background: rgba(22,20,14,.05); } .ds-card-act:focus-visible { outline: 2px solid #1d5fd6; outline-offset: 2px; } .ds-card-body { padding: 18px; font: 400 14px 'General Sans', system-ui, sans-serif; color: #16140e; }"
+    },
+    {
+      "name": "Icon Rail Link",
+      "kind": "nav",
+      "refersTo": "",
+      "description": "40px rail button; active gets an accent tint and an inset ink bar.",
+      "html": "<nav class=\"ds-rail\"><button class=\"ds-rail-link is-active\" aria-label=\"Run\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.4\"><path d=\"M4 2.5v11l9-5.5z\"/></svg></button><button class=\"ds-rail-link\" aria-label=\"History\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.4\"><circle cx=\"8\" cy=\"8\" r=\"6\"/><path d=\"M8 4.5V8l2.5 1.5\"/></svg></button></nav>",
+      "css": ".ds-rail { display: inline-flex; flex-direction: column; gap: 6px; padding: 12px 9px; background: #f0ebdd; border-right: 1px solid rgba(22,20,14,.16); } .ds-rail-link { display: grid; place-items: center; width: 40px; height: 40px; border: 0; background: transparent; color: #8a887c; cursor: pointer; transition: color .2s, background .2s; } .ds-rail-link:hover { color: #16140e; } .ds-rail-link.is-active { color: #1d5fd6; background: rgba(29,95,214,.14); box-shadow: inset 2px 0 0 #1d5fd6; } .ds-rail-link:focus-visible { outline: 2px solid #1d5fd6; outline-offset: -2px; }"
+    },
+    {
+      "name": "Workflow Node",
+      "kind": "custom",
+      "refersTo": "workflow-node",
+      "description": "260px step card on the canvas; the border is tinted by status.",
+      "html": "<div class=\"ds-node\"><div class=\"ds-node-top\"><strong>Validasi SEP</strong><span class=\"ds-node-chip\">Selesai</span></div><p>Mencari SEP RITL dari menu pendaftaran</p><small>1.0s</small></div>",
+      "css": ".ds-node { width: 260px; padding: 9px 11px; border: 1.5px solid #14803c; border-radius: 2px; background: #fffdf6; font: 400 12px 'General Sans', system-ui, sans-serif; color: #16140e; transition: transform .2s cubic-bezier(.22,1,.36,1); } .ds-node:hover { transform: translateY(-1px); } .ds-node-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; } .ds-node p { margin: 4px 0; color: #56544a; font-size: 11px; } .ds-node small { color: #8a887c; font: 400 10px 'IBM Plex Mono', ui-monospace, monospace; } .ds-node-chip { padding: 3px 7px; border-radius: 100px; border: 1px solid rgba(20,120,80,.38); background: rgba(20,120,80,.1); color: #14532d; font: 700 9px/1 'IBM Plex Mono', ui-monospace, monospace; text-transform: uppercase; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Ledger Desk",
+    "overview": "**Creative North Star: \"The Ledger Desk\"**\n\nSIMRS-Flow looks like a billing clerk's desk: warm ruled paper, blue ink, and a monospace\nhand for anything that is a number, an ID or a status. The operator is checking money and\npatient records, so the interface stays calm and precise. Every state is written down\nplainly, and nothing competes with the data for attention.\n\nThe system is dense but not cramped:\n- Thin rules separate everything.\n- Corners are nearly square.\n- Section headers are numbered like ledger entries (\"01 ·\").\n- Colour is mostly reserved for meaning: ink blue for the action and the current place,\n  and green, amber, red and violet for workflow state.\n\nThe paper theme is the default. A night theme (\"Night Ledger\") keeps the same structure\non deep navy for dim rooms.",
+    "keyCharacteristics": [
+      "Warm paper canvas, one blue ink accent, semantic status colours.",
+      "General Sans for reading; IBM Plex Mono for labels, data, IDs and timestamps.",
+      "Hairline rules and near-square corners; pills only for status chips.",
+      "Numbered, uppercase mono section headers.",
+      "Restrained motion: short eases on colour, border and a 2px lift."
+    ],
+    "rules": [
+      {
+        "name": "The One Ink Rule",
+        "body": "Ledger Ink is the only accent hue. Anything blue means \"action\" or \"you are here\". Never use it as decoration.",
+        "section": "colors"
+      },
+      {
+        "name": "The Written-State Rule",
+        "body": "A status colour never appears without its word. Chips and nodes always carry a text label (Selesai, Menunggu, RUNNING), so meaning survives colour-blindness and grayscale printouts.",
+        "section": "colors"
+      },
+      {
+        "name": "The Counted-Things-Are-Mono Rule",
+        "body": "If an operator might compare it against SIMRS (an ID, a date, an amount, a status code), set it in IBM Plex Mono. Prose stays in General Sans.",
+        "section": "typography"
+      },
+      {
+        "name": "The Mixed-Language Rule",
+        "body": "Control labels stay in English (Run, Preview, Inspector). Domain terms and statuses stay in Bahasa Indonesia (Rawat Inap, Berjalan, Selesai). Typography treats both the same; never translate one side to \"match\".",
+        "section": "typography"
+      },
+      {
+        "name": "The Every-Screen-Is-A-Work-Screen Rule",
+        "body": "The layout must not scroll sideways and must keep every task reachable from below 1366×768 up to 2560px. Phones and tablets get the stacked Run layout, not a cut-down one.",
+        "section": "layout"
+      },
+      {
+        "name": "The Lift-On-Intent Rule",
+        "body": "Cards rise only 2px on hover (`--lift`, eased over .32s). Depth reacts to the operator; it never animates on its own.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do keep Ledger Ink as the single accent. Status colours carry state only.",
+      "Do give every action that writes to SIMRS the amber warning tone, so a write never looks like a routine click.",
+      "Do set IDs, no. RM, money, dates and statuses in IBM Plex Mono.",
+      "Do pair every status colour with its word, in both themes.",
+      "Do keep corners at 0–3px, and use pills only for status and presence chips.",
+      "Do keep section headers as uppercase mono with the automatic ledger number.",
+      "Do keep sticky or overlay surfaces opaque, so content scrolling underneath never shows through.",
+      "Do verify every layout from below 1366×768 to 2560px and on a phone, in both paper and night themes."
+    ],
+    "donts": [
+      "Don't fill status chips with solid colour. They stay tinted with a hairline border.",
+      "Don't add a second accent hue or use blue decoratively.",
+      "Don't use grid backgrounds outside the workflow canvas.",
+      "Don't let floating Run panels cover the graph toolbar or each other in the default layout.",
+      "Don't convey preview versus write by colour alone. Write mode always says \"Confirmed write\" and uses the amber tone."
+    ]
+  }
+}

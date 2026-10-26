@@ -1,0 +1,26 @@
+SIMRS-Flow portable (uji coba)
+==============================
+
+Tidak perlu install Node.js dan tidak perlu akses admin.
+
+1. Ekstrak zip ke folder milik user, misalnya:
+   C:\Users\<nama>\simrs-flow-portable
+   (jangan di C:\Program Files - butuh admin untuk menulis data)
+2. Cek pengaturan di file config.env (alamat EvoMedis, port). Buka dengan Notepad.
+3. Klik dua kali start.bat. Jendela hitam harus tetap terbuka selama aplikasi dipakai.
+4. Buka di browser:
+   - PC ini      : http://127.0.0.1:4500/
+   - PC lain LAN : alamat "open: http://192.168.x.x:4500/" yang tercetak di jendela start.bat
+
+Windows Firewall
+  Saat pertama dijalankan, Windows bisa menampilkan dialog firewall untuk node.exe.
+  Tanpa admin, izin masuk dari PC lain mungkin tidak bisa diberikan. Kalau PC lain
+  tidak bisa membuka alamat LAN, minta IT mengizinkan port 4500 (TCP, masuk) atau
+  program node\node.exe di folder ini. Akses dari PC ini sendiri (127.0.0.1) tetap jalan.
+
+Data
+  Ledger audit, rules, data naik kelas, dan cache OCR tersimpan di app\.data\.
+  Saat memperbarui ke versi baru, salin folder app\.data\ dan file config.env ke folder baru.
+
+Berhenti
+  Tutup jendela start.bat.

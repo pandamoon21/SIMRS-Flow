@@ -1,0 +1,46 @@
+/**
+ * @simrs-flow/test-fixtures
+ *
+ * Sanitized fixtures (synthetic data only) and a mock event player for
+ * offline UI replay and deterministic dry-run tests.
+ */
+
+export {
+  ranapFixtures,
+  RANAP_HAPPY_INPUT,
+  RANAP_DEBUG_INPUT,
+  RANAP_FIXTURE_GRAND_TOTAL,
+  RANAP_BYNY_BIRTH_DATE,
+  RANAP_BYNY_OWN_SEP_OVERRIDES,
+  RANAP_BYNY_HEALTHY_OVERRIDES,
+  RANAP_BYNY_SICK_OVERRIDES,
+  RANAP_BYNY_IBS_OVERRIDES,
+  RANAP_TWO_ROOM_OVERRIDES,
+  RANAP_TWO_REG_OVERRIDES,
+  RANAP_TWO_REG_FIRST_REG,
+  RANAP_TWO_REG_SECOND_REG,
+  RANAP_IGD_ELEKTROMEDIK_OVERRIDES,
+  RANAP_IGD_TRX,
+  RANAP_IGD_ELEKTROMEDIK_TRX,
+  RANAP_POLI_SOURCE_TRX,
+  RANAP_VISITE_WRONG_TARIF_OVERRIDES,
+  RANAP_VISITE_REPLAN_NEW_URUT,
+  ranapVisiteReplanOverrides,
+  ranapVerifiedDuplicateVisiteOverrides,
+  RANAP_VERIFIED_DUPLICATE_URUT,
+  RANAP_VISITE_DESIRED_PELAKSANA,
+  RANAP_VISITE_INTERMEDIATE_PELAKSANA,
+  RANAP_OBAT_DETAIL_OVERRIDES,
+  RANAP_OBAT_MATCH_BIAYA_REFERENSI,
+  RANAP_OBAT_MATCH_CORRECT_ORDER,
+  RANAP_OBAT_MATCH_DECOY_ORDER,
+} from './ranap.js';
+export {
+  rajalFixtures,
+  RAJAL_DISCOVERY_INPUT,
+  RAJAL_HAPPY_INPUT,
+  RAJAL_UNPAID_REPORT_EMPTY_HTML,
+  RAJAL_UNPAID_REPORT_HTML,
+} from './rajal.js';
+export { mockEventStream } from './mockEvents.js';
+export type { MockRunOptions } from './mockEvents.js';

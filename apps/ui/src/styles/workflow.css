@@ -1,0 +1,1033 @@
+.run-detail-page {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+}
+
+.run-command-card {
+  margin: 10px 12px 0;
+  border-color: var(--line);
+  background: var(--surface-1);
+}
+
+.run-command-bar,
+.run-command-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.run-command-bar > div:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.run-error-alert {
+  margin: 10px 12px 0;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: clamp(280px, 25vw, 360px) minmax(0, 1fr);
+  grid-template-areas: 'side canvas';
+  min-width: 0;
+  min-height: 0;
+  margin-top: 10px;
+  overflow: hidden;
+  border-top: 1px solid var(--line);
+}
+
+.workspace.sidebar-collapsed {
+  grid-template-columns: 56px minmax(0, 1fr);
+}
+
+.side {
+  grid-area: side;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-right: 1px solid var(--line);
+  background: var(--surface-0);
+}
+
+.side-rail {
+  position: relative;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 56px;
+  padding: 6px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-0);
+}
+
+.side-scroll {
+  display: grid;
+  grid-auto-rows: max-content;
+  gap: 10px;
+  min-height: 0;
+  padding: 10px;
+  overflow: auto;
+}
+
+.sidebar-toggle,
+.panel-restore-button {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.sidebar-toggle {
+  flex: 0 0 44px;
+  padding: 0;
+}
+
+.panel-toggle-row {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.panel-restore-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.panel-restore-mark {
+  font: 700 11px/1 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+.sidebar-collapsed .side-scroll {
+  display: none;
+}
+
+.sidebar-collapsed .side {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.sidebar-collapsed .side-rail {
+  flex-direction: column;
+  align-items: stretch;
+  align-content: start;
+  min-height: 0;
+  border-bottom: 0;
+}
+
+.sidebar-collapsed .panel-toggle-row {
+  flex-direction: column;
+}
+
+.sidebar-collapsed .panel-restore-button {
+  width: 44px;
+  padding: 0;
+}
+
+.sidebar-collapsed .panel-restore-label {
+  display: none;
+}
+
+.button-row,
+.panel-actions,
+.console-summary,
+.mutation-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.card-header-actions {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.card-header-actions > :first-child {
+  min-width: 0;
+  flex: 1 1 140px;
+  overflow-wrap: anywhere;
+}
+
+.panel-actions {
+  min-width: 0;
+  justify-content: flex-end;
+}
+
+.panel-card {
+  max-height: min(42vh, 390px);
+  border-color: var(--line);
+  background: var(--surface-1);
+}
+
+.panel-scroll {
+  overflow: auto;
+}
+
+.panel-section {
+  margin-top: 14px;
+}
+
+.panel-section h2 {
+  margin: 0 0 8px;
+  color: var(--ink-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+
+.canvas-wrap {
+  grid-area: canvas;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  /* pleurat canvas: fine hairline grid over the deep canvas (their .sv-cn-canvas) */
+  background:
+    linear-gradient(rgba(239, 237, 226, .03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(239, 237, 226, .03) 1px, transparent 1px),
+    var(--canvas);
+  background-size: 24px 24px;
+}
+
+html[data-theme='light'] .canvas-wrap {
+  background:
+    linear-gradient(rgba(22, 20, 14, .05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(22, 20, 14, .05) 1px, transparent 1px),
+    #fffcf0;
+}
+
+.canvas-helper-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--panel-bg, rgba(15, 21, 38, .96));
+  box-shadow: var(--shadow-float);
+}
+.workflow-reference {
+  display: grid;
+  gap: 5px;
+  width: 216px;
+  padding: 10px 12px;
+  border: 1px dashed var(--ink-faint);
+  border-radius: 6px;
+  background: var(--surface-0);
+  color: var(--ink-muted);
+  font-size: 10px;
+  line-height: 1.35;
+}
+.workflow-reference strong { color: var(--ink); font-size: 11px; }
+.workflow-reference-kind { color: var(--ink-muted); font: 600 9px/1.3 'IBM Plex Mono', ui-monospace, monospace; text-transform: uppercase; letter-spacing: .06em; }
+.workflow-reference .react-flow__handle { opacity: 0; }
+.workflow-edge--reference .react-flow__edge-path { opacity: .6; }
+.workflow-edge--adjacent .react-flow__edge-path { opacity: .85; }
+.canvas-helper-panel .btn-group { flex-wrap: wrap; }
+
+
+.wf-node {
+  width: var(--node-width);
+  max-width: var(--node-width);
+  padding: 9px 11px;
+  border: 1.5px solid var(--line);
+  border-radius: 2px;
+  background: var(--panel-bg, var(--surface-1));
+  color: var(--ink);
+  --node-accent: var(--ink-faint);
+  box-shadow: none;
+  cursor: pointer;
+  font-size: 12px;
+  transition: transform var(--dur-1) var(--ease-std), box-shadow var(--dur-1) var(--ease-std), border-color var(--dur-2) var(--ease-out), background-color var(--dur-2) var(--ease-out);
+}
+
+.wf-node {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  height: 100%;
+  overflow: hidden;
+}
+.wf-node:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.wf-node .wf-node-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.wf-node .wf-node-title { display: flex; align-items: flex-start; gap: 6px; min-width: 0; font: 600 12px/1.3 'IBM Plex Sans', system-ui, sans-serif; }
+.wf-node .wf-node-kind { flex: none; color: var(--node-accent); font-weight: 700; }
+.wf-node .status-pill {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 6px;
+  border: 1px solid var(--node-accent);
+  border-radius: 999px;
+  color: var(--node-accent);
+  font-size: 10px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.wf-node .status-pill .dot { width: 6px; height: 6px; }
+.wf-node .wf-node-description {
+  margin: 0;
+  overflow: hidden;
+  color: var(--ink-muted);
+  font-size: 10.5px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wf-node .meta { margin-top: auto; }
+.wf-node .react-flow__handle { width: 6px; height: 6px; border: 0; background: var(--node-accent); }
+
+.phase-header {
+  z-index: 5;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--line-2, var(--line));
+  border-radius: 6px;
+  background: var(--surface-1);
+  color: var(--ink);
+  box-shadow: var(--shadow-card);
+  font: 600 11px/1.1 'IBM Plex Mono', ui-monospace, monospace;
+}
+.phase-header-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.phase-header-count { flex: none; color: var(--ink-muted); font-size: 10px; }
+.phase-header.is-active { border-top-color: var(--accent); }
+.phase-header.needs-review { border-top-color: var(--st-review-border); }
+.phase-header.is-failed { border-top-color: var(--danger); }
+
+.node-recap {
+  display: grid;
+  gap: 1px;
+  margin: 2px 0 0;
+  padding: 6px 8px;
+  border: 1px solid var(--line-2, var(--line));
+  border-radius: 4px;
+  background: var(--surface-0);
+  color: var(--ink-muted);
+  font-size: 11px;
+  line-height: 15px;
+  list-style: none;
+}
+.node-recap li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.node-recap li:first-child { color: var(--label-ink, var(--ink-muted)); font: 600 9px/1.4 'IBM Plex Mono', ui-monospace, monospace; letter-spacing: .06em; }
+
+/* Edge labels (IGD / POLI, guard reasons) on the dark canvas. */
+.react-flow__edge-text { fill: var(--ink); font: 600 10px 'IBM Plex Mono', ui-monospace, monospace; }
+.react-flow__edge-textbg { fill: var(--surface-1); }
+
+/* Minimap mirrors the card colours; the mask follows the theme surface. */
+.workflow-minimap .react-flow__minimap-mask { fill: var(--surface-0); fill-opacity: .7; }
+.react-flow__minimap-node.mm-reference { fill: var(--ink-faint); }
+.react-flow__minimap-node.mm-status-pending { fill: var(--st-pending-border); }
+.react-flow__minimap-node.mm-status-queued { fill: var(--accent-line); }
+.react-flow__minimap-node.mm-status-running,
+.react-flow__minimap-node.mm-status-retrying { fill: var(--accent); }
+.react-flow__minimap-node.mm-status-success { fill: var(--success); }
+.react-flow__minimap-node.mm-status-skipped { fill: var(--ink-muted); }
+.react-flow__minimap-node.mm-status-failed { fill: var(--danger); }
+.react-flow__minimap-node.mm-status-blocked { fill: var(--st-blocked-border); }
+.react-flow__minimap-node.mm-status-needs_review { fill: var(--st-review-border); }
+.react-flow__minimap-node.mm-status-gate_waiting { fill: var(--st-gate-border); }
+
+.canvas-notice {
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--panel-bg, var(--surface-1));
+  color: var(--ink-muted);
+  font-size: 11px;
+}
+
+.wf-node:hover {
+  box-shadow: var(--shadow-card);
+  transform: translateY(-1px);
+}
+
+.wf-node .label-text {
+  display: -webkit-box;
+  min-width: 0;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* Summary and issues: the card's reading surface, clamped so the graph keeps
+   a predictable node height whatever the backend returned. */
+.wf-node .summary {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.wf-node .issues {
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wf-node .issue {
+  font-size: 10px;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wf-node .issue-error { color: var(--danger); }
+.wf-node .issue-warn { color: var(--warning); }
+
+.wf-node .issue-more {
+  font-size: 10px;
+  color: var(--ink-faint);
+}
+
+.wf-node .meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--ink-faint);
+}
+
+.wf-node .meta-right {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  white-space: nowrap;
+}
+
+.wf-node .plan-progress { color: var(--ink); }
+
+.wf-node .node-review {
+  margin-top: 7px;
+  width: 100%;
+  padding: 3px 6px;
+  border: 1px solid var(--accent-line);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: .03em;
+  cursor: pointer;
+}
+
+.wf-node .node-review:hover { background: var(--accent-soft, rgba(82, 168, 255, .12)); }
+.wf-node .node-review:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.wf-node .dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--node-accent);
+}
+
+/* Design-parity nodes: paper card, coloured border + status dot, ink label.
+   The border and dot colour are the static cue for every state — live states
+   (running / gate) only breathe the 8px indicator dot's opacity, so an idle
+   canvas with N live nodes costs N compositor opacity layers instead of N
+   continuously repainted box-shadow rings on the cards themselves. */
+.wf-node.status-pending { --node-accent: var(--st-pending-border); }
+.wf-node.status-queued { --node-accent: var(--accent-line); }
+.wf-node.status-running { --node-accent: var(--accent); }
+.wf-node.status-retrying { --node-accent: var(--accent); border-style: dashed; }
+.wf-node.status-success { --node-accent: var(--success); }
+.wf-node.status-skipped { --node-accent: var(--ink-muted); }
+.wf-node.status-failed { --node-accent: var(--danger); }
+.wf-node.status-blocked { --node-accent: var(--st-blocked-border); }
+.wf-node.status-needs_review { --node-accent: var(--st-review-border); }
+.wf-node.status-gate_waiting { --node-accent: var(--st-gate-border); }
+.wf-node[class*='status-'] { border-color: var(--node-accent); }
+.wf-node.status-pending { border-color: var(--line); }
+
+/* Restrained live cue: one soft opacity breath on the status dot only. Gated on
+   no-preference so reduced motion keeps a fully visible, static dot. */
+@media (prefers-reduced-motion: no-preference) {
+  .wf-node.status-running .dot,
+  .wf-node.status-gate_waiting .dot {
+    animation: node-dot-breathe 1.8s var(--ease-std) infinite;
+  }
+}
+
+.wf-node.selected {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.risk-badge {
+  padding: 2px 6px;
+  border-radius: 2px;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.risk-low { background: rgba(63, 224, 174, .15); color: #8fffe1; }
+.risk-medium { background: rgba(251, 191, 36, .15); color: #fde68a; }
+.risk-high { background: rgba(251, 146, 60, .18); color: #fed7aa; }
+.risk-critical { background: rgba(248, 113, 113, .18); color: #fecaca; }
+/* The light canvas needs ink-dark text on the tint, not the dark-theme pastel. */
+html[data-theme='light'] .risk-low { color: #0b6b4f; }
+html[data-theme='light'] .risk-medium { color: #7a5200; }
+html[data-theme='light'] .risk-high { color: #8a3b00; }
+html[data-theme='light'] .risk-critical { color: #9b1c1c; }
+
+.mutation-plan {
+  padding: 10px;
+  margin-bottom: 8px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--surface-1);
+  overflow-wrap: anywhere;
+}
+
+.mutation-plan p {
+  margin: 7px 0;
+}
+
+/* ── Evidence panels ───────────────────────────────────────────────
+   Each step attaches structured evidence to its result; these are the
+   tables that make it readable instead of raw JSON. */
+
+.mono {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.evidence-block + .evidence-block {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.evidence-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.evidence-scroll {
+  overflow-x: auto;
+}
+
+.evidence-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.evidence-table th {
+  padding: 3px 8px 5px 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.evidence-table td {
+  padding: 5px 8px 5px 0;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.evidence-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.evidence-table tr[data-titipan='yes'] {
+  background: rgba(242, 189, 76, .08);
+}
+
+.evidence-verdict {
+  font-weight: 600;
+}
+
+.evidence-verdict[data-verdict='TITIPAN'] { color: var(--warning); }
+.evidence-verdict[data-verdict='NORMAL'] { color: var(--success); }
+.evidence-verdict[data-verdict='PERLU CEK MANUAL'],
+.evidence-verdict[data-verdict='TIDAK DAPAT DIEVALUASI'] { color: var(--ink-muted); }
+
+.evidence-alerts {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.evidence-alerts li {
+  display: flex;
+  gap: 7px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.evidence-alert-level {
+  flex: none;
+  min-width: 42px;
+  color: var(--ink-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .05em;
+}
+
+.evidence-alerts li[data-level='WARN'] .evidence-alert-level { color: var(--warning); }
+.evidence-alerts li[data-level='ERROR'] .evidence-alert-level { color: var(--danger); }
+
+.evidence-list {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.evidence-json {
+  max-height: 180px;
+  margin: 0;
+  padding: 8px 10px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--surface-0);
+  color: var(--ink-muted);
+  font: 11px/1.5 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.mutation-subtitle {
+  display: block;
+  margin: 9px 0 3px;
+  color: var(--ink-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+.mutation-checks {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 12px;
+}
+
+.mutation-checks li {
+  margin: 2px 0;
+}
+
+/* ── Run log ───────────────────────────────────────────────────────
+   The executors emit aligned `- label : value` blocks, so the message
+   column is rendered verbatim in a monospace face with `pre-wrap`, and
+   nothing is ever prepended to a line — the timestamp and step name live
+   in the group header instead. */
+
+.log-box {
+  padding: 14px 22px;
+  overflow: auto;
+  border: none;
+  border-radius: 0;
+  /* pleurat .sv-cn-log: ink-on-ink surface, warm cream text at 78% */
+  background: rgba(22, 20, 14, .55);
+  color: rgba(251, 247, 230, .78);
+  font: 12.5px/1.9 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  tab-size: 4;
+  scroll-behavior: smooth;
+}
+
+html[data-theme='light'] .log-box {
+  background: rgba(22, 20, 14, .04);
+  color: rgba(22, 20, 14, .78);
+}
+
+.node-log-box {
+  max-height: 180px;
+  padding: 8px 10px;
+}
+
+.console-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 190px;
+  gap: 8px;
+}
+
+.run-log-shell {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 170px;
+}
+
+.run-log-box {
+  flex: 1;
+  min-height: 170px;
+}
+
+/* One step's output: a sticky header, then its lines. */
+.log-group + .log-group {
+  margin-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.log-group-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 10px 4px;
+  /* Opaque: a fade-to-transparent header let scrolled lines ghost through it. */
+  background: var(--surface-0);
+  border-bottom: 1px solid var(--line-2);
+}
+
+.log-group-time {
+  color: var(--ink-faint);
+  font-size: 11px;
+  letter-spacing: .02em;
+}
+
+.log-group-name {
+  color: var(--ink);
+  font-weight: 600;
+  letter-spacing: .01em;
+}
+
+.log-group-section {
+  color: var(--ink-faint);
+  font-size: 11px;
+}
+
+.log-group-status {
+  margin-left: auto;
+  padding: 0 6px;
+  border: 1px solid var(--st-pending-border);
+  border-radius: 999px;
+  background: var(--st-pending-bg);
+  color: var(--st-pending-text);
+  font-size: 10px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.log-group-status[data-status='running'] { border-color: var(--st-running-border); background: var(--st-running-bg); color: var(--st-running-text); }
+.log-group-status[data-status='success'] { border-color: var(--st-success-border); background: var(--st-success-bg); color: var(--st-success-text); }
+.log-group-status[data-status='failed'] { border-color: var(--st-failed-border); background: var(--st-failed-bg); color: var(--st-failed-text); }
+.log-group-status[data-status='skipped'] { border-color: var(--st-skipped-border); background: var(--st-skipped-bg); color: var(--st-skipped-text); }
+.log-group-status[data-status='blocked'] { border-color: var(--st-blocked-border); background: var(--st-blocked-bg); color: var(--st-blocked-text); }
+.log-group-status[data-status='needs_review'] { border-color: var(--st-review-border); background: var(--st-review-bg); color: var(--st-review-text); }
+.log-group-status[data-status='gate_waiting'] { border-color: var(--st-gate-border); background: var(--st-gate-bg); color: var(--st-gate-text); }
+
+/* A group that produced a warning or an error is marked on the rail, so it
+   can be found while scrolling without reading every line. */
+.log-group[data-severity='warn'] .log-group-head { box-shadow: inset 2px 0 0 var(--warning); }
+.log-group[data-severity='error'] .log-group-head { box-shadow: inset 2px 0 0 var(--danger); }
+
+.log-line {
+  padding: 0 10px;
+  color: var(--ink-muted);
+  font-family: 'IBM Plex Mono', 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Shape, from the line's own indentation. Colour only — never spacing that
+   would shift the aligned columns sideways. */
+.log-line[data-shape='heading'] {
+  margin-top: 3px;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.log-line[data-shape='bullet'] { color: var(--accent); }
+.log-line[data-shape='numbered'] { color: var(--ink); }
+.log-line[data-shape='pair'] { color: var(--ink-muted); }
+
+.log-line[data-severity='warn'] { color: var(--warning); }
+.log-line[data-severity='error'] { color: var(--danger); }
+.log-line[data-severity='debug'] { color: var(--ink-faint); }
+
+.log-follow-pill {
+  position: absolute;
+  right: 14px;
+  bottom: 10px;
+  border-radius: 999px;
+  box-shadow: var(--shadow-float);
+}
+
+.console-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.console-title-status {
+  padding: 1px 7px;
+  border: 1px solid var(--st-pending-border);
+  border-radius: 999px;
+  background: var(--st-pending-bg);
+  color: var(--st-pending-text);
+  font-size: 10px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.console-title-status[data-status='running'] { border-color: var(--st-running-border); background: var(--st-running-bg); color: var(--st-running-text); }
+.console-title-status[data-status='completed'] { border-color: var(--st-success-border); background: var(--st-success-bg); color: var(--st-success-text); }
+.console-title-status[data-status='failed'] { border-color: var(--st-failed-border); background: var(--st-failed-bg); color: var(--st-failed-text); }
+.console-title-status[data-status='cancelled'] { border-color: var(--st-skipped-border); background: var(--st-skipped-bg); color: var(--st-skipped-text); }
+
+.console-progress {
+  color: var(--ink-muted);
+  font-size: 11px;
+}
+
+.console-progress strong {
+  color: var(--ink);
+}
+
+.console-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 7px;
+  border: 1px solid var(--st-pending-border);
+  border-radius: 999px;
+  background: var(--st-pending-bg);
+  color: var(--st-pending-text);
+  font-size: 10px;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+}
+
+.console-stat b {
+  font-size: 11px;
+}
+
+.console-stat[data-status='running'] { border-color: var(--st-running-border); background: var(--st-running-bg); color: var(--st-running-text); }
+.console-stat[data-status='success'] { border-color: var(--st-success-border); background: var(--st-success-bg); color: var(--st-success-text); }
+.console-stat[data-status='failed'] { border-color: var(--st-failed-border); background: var(--st-failed-bg); color: var(--st-failed-text); }
+.console-stat[data-status='skipped'] { border-color: var(--st-skipped-border); background: var(--st-skipped-bg); color: var(--st-skipped-text); }
+.console-stat[data-status='blocked'] { border-color: var(--st-blocked-border); background: var(--st-blocked-bg); color: var(--st-blocked-text); }
+.console-stat[data-status='needs_review'] { border-color: var(--st-review-border); background: var(--st-review-bg); color: var(--st-review-text); }
+.console-stat[data-status='gate_waiting'] { border-color: var(--st-gate-border); background: var(--st-gate-bg); color: var(--st-gate-text); }
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.empty {
+  padding: 16px;
+  color: var(--ink-muted);
+  text-align: center;
+}
+
+.replay-bar {
+  position: absolute;
+  z-index: 5;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-top: 1px solid var(--line);
+  background: var(--panel-bg, rgba(12, 20, 31, .94));
+  backdrop-filter: blur(8px);
+}
+
+.replay-bar input[type='range'] {
+  min-width: 80px;
+  flex: 1;
+  accent-color: var(--accent);
+}
+
+.workflow-edge .react-flow__edge-path { stroke-linecap: round; stroke-linejoin: round; }
+.workflow-edge--idle .react-flow__edge-path { opacity: .8; }
+.workflow-edge--skipped .react-flow__edge-path { opacity: .75; }
+
+.react-flow__controls {
+  overflow: hidden;
+  bottom: 54px !important;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  box-shadow: var(--shadow-card);
+}
+
+.react-flow__controls-button {
+  width: 30px;
+  height: 30px;
+  border-color: var(--line) !important;
+  background: var(--surface-1) !important;
+  color: var(--ink) !important;
+  fill: var(--ink) !important;
+}
+
+.react-flow__minimap,
+.workflow-minimap {
+  width: clamp(112px, 12vw, 150px) !important;
+  height: clamp(72px, 9vw, 104px) !important;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--panel-bg, rgba(15, 21, 38, .96));
+}
+
+/* Node indicator breath — opacity only (no layout, no repaint of the card).
+   The card's status colour and border stay put; only the dot dims. */
+@keyframes node-dot-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .42; }
+}
+
+@media (max-width: 1024px) {
+  .workspace,
+  .workspace.sidebar-collapsed {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(250px, 38vh) minmax(0, 1fr);
+    grid-template-areas: 'side' 'canvas';
+  }
+
+  .workspace.sidebar-collapsed {
+    grid-template-rows: 56px minmax(0, 1fr);
+  }
+
+  .sidebar-collapsed .side-rail {
+    flex-direction: row;
+    align-items: center;
+    overflow-x: auto;
+  }
+
+  .sidebar-collapsed .panel-toggle-row {
+    flex-direction: row;
+    flex-wrap: nowrap;
+  }
+
+  .side {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .side-scroll {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .run-command-bar,
+  .run-command-status {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .side-scroll {
+    grid-template-columns: 1fr;
+  }
+
+  .canvas-helper-panel { max-width: min(280px, calc(100% - 20px)); }
+  .canvas-helper-panel .btn-group { display: flex; flex-wrap: wrap; }
+  .canvas-helper-panel .btn { flex: 1 1 calc(50% - 4px); }
+
+}
+
+/* Reduced motion: every workflow cue becomes static. The running / gate border
+   and dot colour, the animated-edge colour and the warning chip's tint all stay
+   visible — only the motion is dropped, so state remains readable. */
+@media (prefers-reduced-motion: reduce) {
+  .wf-node.status-running,
+  .wf-node.status-gate_waiting,
+  .wf-node.status-running .dot,
+  .wf-node.status-gate_waiting .dot,
+  .run-command-status .badge.bg-warning::before {
+    animation: none;
+  }
+  .workflow-edge.animated .react-flow__edge-path { animation: none; }
+}
+
+
+/* ── Run.dc.html visual parity: command pills, segmented setup toggles,
+      gate-alert accent. Appended by the Run design port. ─────────────── */
+/* Was a 1.6s opacity 1 -> .25 hard blink; slowed and narrowed to .55 -> 1 so the
+   running/gate chip reads as "live" without strobing at the operator. The .badge
+   tint still carries the state when motion is off. */
+@keyframes cc-blink { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+
+/* command-bar status chips read as pills (the mockup uses radius-pill).
+   Every .badge already carries a leading status dot via .badge::before,
+   so we only add the pill shape here and let the live "running/gate"
+   chip's dot blink. */
+.run-command-status .badge {
+  padding: 6px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 10px;
+}
+.run-command-status .badge.bg-warning::before {
+  animation: cc-blink 2.4s var(--ease-std) infinite;
+}
+
+/* setup rail: full-width segmented toggles (workflow / source / mode) */
+.run-setup-body .control-cluster .btn-group { display: grid; grid-template-columns: 1fr 1fr; }
+.run-setup-body .control-cluster .btn-group > .btn { width: 100%; }
+
+/* inspector gate alert: accent left rule, matching the mockup */
+.inspector-card .alert-warning { border-left: 3px solid var(--warning); }
+
+
+/* Console line markers (pleurat-style gutter): heading command, detail dot,
+   warn/error ticks. position:absolute keeps the monospace pair-alignment. */
+.log-line { position: relative; padding-left: 16px; }
+.log-line::before {
+  content: '\B7';
+  position: absolute;
+  left: 3px;
+  color: var(--ink-faint);
+}
+.log-line[data-shape='heading'] { color: var(--ink); }
+.log-line[data-shape='heading']::before { content: '\276F'; color: var(--accent); font-size: .9em; }
+.log-line[data-severity='warn']::before { content: '!'; color: var(--warning); font-weight: 700; }
+.log-line[data-severity='error']::before { content: '\2717'; color: var(--danger); font-weight: 700; }
+
+.console-duration {
+  font: 500 10px/1 'IBM Plex Mono', ui-monospace, monospace;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}

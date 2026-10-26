@@ -1,0 +1,23 @@
+{
+  "name": "@simrs-flow/test-fixtures",
+  "version": "0.1.0",
+  "description": "Sanitized fixtures and fixture-backed transport for deterministic dry-run tests.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "src"],
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@simrs-flow/evomedis-client": "0.1.0",
+    "@simrs-flow/workflow-core": "0.1.0"
+  }
+}

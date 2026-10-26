@@ -1,0 +1,29 @@
+{
+  "name": "@simrs-flow/orchestrator",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local/intranet workflow runner API: REST commands + SSE event stream over the headless engine.",
+  "type": "module",
+  "main": "./dist/server.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "node --import tsx --watch src/main.ts",
+    "start": "node --import tsx src/main.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.1.0",
+    "@fastify/static": "^10.1.2",
+    "@simrs-flow/audit-ledger": "0.1.0",
+    "@simrs-flow/berkas": "0.1.0",
+    "@simrs-flow/domain-rajal": "0.1.0",
+    "@simrs-flow/domain-ranap": "0.1.0",
+    "@simrs-flow/evomedis-client": "0.1.0",
+    "@simrs-flow/test-fixtures": "0.1.0",
+    "@simrs-flow/workflow-core": "0.1.0",
+    "fastify": "^5.10.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.15.6"
+  }
+}

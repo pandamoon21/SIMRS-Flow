@@ -1,0 +1,24 @@
+{
+  "name": "@simrs-flow/domain-ranap",
+  "version": "0.1.0",
+  "description": "Rawat inap (inpatient) 24-step verification & payment-staging workflow definition and dry-run executors.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "src"],
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@simrs-flow/berkas": "0.1.0",
+    "@simrs-flow/workflow-core": "0.1.0",
+    "@simrs-flow/evomedis-client": "0.1.0"
+  }
+}
