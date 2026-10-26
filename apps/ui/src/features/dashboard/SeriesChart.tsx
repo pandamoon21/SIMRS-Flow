@@ -57,7 +57,8 @@ export function SeriesChart({ points, type = 'bar', format, selectedKey, current
   const innerW = W - padL - padR;
   const innerH = H - padT - padB;
   const n = points.length;
-  const { top, step } = niceMax(Math.max(0, ...points.map((p) => p.value)));
+  const peak = Math.max(0, ...points.map((p) => p.value));
+  const { top, step } = niceMax(peak);
   const y = (v: number) => padT + innerH - (v / top) * innerH;
   const slot = n ? innerW / n : innerW;
   const xMid = (i: number) => padL + slot * i + slot / 2;
@@ -65,8 +66,9 @@ export function SeriesChart({ points, type = 'bar', format, selectedKey, current
   const labelEvery = Math.max(1, Math.ceil(38 / Math.max(1, slot)));
   const showValues = type === 'bar' && slot >= 52;
   const barW = Math.max(2, Math.min(44, slot * 0.62));
-  const ticks: number[] = [];
-  for (let v = 0; v <= top + step / 2; v += step) ticks.push(v);
+  // No data: only the zero baseline — fractional rupiah ticks read as "1, 1, 0".
+  const ticks: number[] = [0];
+  if (peak > 0) for (let v = step; v <= top + step / 2; v += step) ticks.push(v);
 
   const press = (key: string) => (e: KeyboardEvent) => {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect?.(key); }

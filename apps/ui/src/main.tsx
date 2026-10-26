@@ -7,8 +7,8 @@ import './styles/theme.part2.css';
 import './styles/workflow.css';
 import { fitZoom } from './ui/fitZoom.js';
 
-// Below 1920px wide, scale the whole UI down so a laptop sees the 1080p layout.
-const applyFitZoom = () => document.documentElement.style.setProperty('--fit-zoom', String(fitZoom(window.innerWidth)));
+// Scale the whole UI so every desktop screen sees the 1080p layout (see fitZoom.ts).
+const applyFitZoom = () => document.documentElement.style.setProperty('--fit-zoom', String(fitZoom(window.innerWidth, window.innerHeight)));
 applyFitZoom();
 window.addEventListener('resize', applyFitZoom);
 
