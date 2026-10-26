@@ -6,7 +6,7 @@
   "description": "Production-ready React Flow rewrite of the EvoMedis/SIMRS automation helper (rawat jalan + rawat inap), with an event-driven headless workflow engine, typed API client, audit ledger, and orchestrator API.",
   "type": "module",
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
   },
   "workspaces": [
     "packages/*",

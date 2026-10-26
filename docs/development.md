@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Node.js >= 20, npm >= 9 (npm workspaces).
+- Node.js >= 22, npm >= 9 (npm workspaces).
 
 ## Install & run
 

@@ -44,7 +44,7 @@ simrs-flow/
 
 ## Prerequisites
 
-- Node.js >= 20
+- Node.js >= 22
 - npm >= 9 (the repo uses npm workspaces)
 
 ## Setup
