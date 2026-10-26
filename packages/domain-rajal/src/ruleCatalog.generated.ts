@@ -266,8 +266,8 @@ export const rajalRuleCatalog: RuleCatalog = {
       "issues": [],
       "findings": [
         "Kunjungan poli belum dapat dipastikan pada …: tanggal/unit atau riwayat pasien tidak terbaca",
-        "Treatment list unreadable on …: …",
-        "Treatment list unreadable on …: response carried no rows",
+        "Daftar tindakan tidak terbaca pada …: …",
+        "Daftar tindakan … tidak terbaca: jawaban tanpa baris",
         "Penunjang belum digolongkan pada …: …",
         "Excluded treatment found on …: \"…\" (found: \"…\")",
         "Required treatment group … unsatisfied on …: none of … billed",
@@ -505,15 +505,15 @@ export const rajalRuleCatalog: RuleCatalog = {
       ],
       "issues": [],
       "findings": [
-        "No BPJS card number for transaction …",
-        "SEP history unreadable on …: …",
+        "No kartu BPJS kosong untuk transaksi …",
+        "Riwayat SEP tidak terbaca pada …: …",
         "Multiple same-day SEP candidates for transaction … (…)",
-        "No … SEP dated … for poli … on transaction …"
+        "Tidak ada SEP … tanggal … untuk poli … pada transaksi …"
       ],
       "actions": [
         {
           "endpointId": "rekamMedis.simpanSep",
-          "text": "Correct SEP on transaction …: … → …"
+          "text": "Koreksi SEP pada transaksi …: … → …"
         }
       ],
       "reads": [
@@ -580,13 +580,13 @@ export const rajalRuleCatalog: RuleCatalog = {
         "Unserved order(s) on …: … outstanding…",
         "Untransferred order(s) on …: … outstanding…",
         "Unverified penunjang transaction on …: …",
-        "Verification status unreadable on …: \"…\"",
+        "Status verifikasi tidak terbaca pada …: \"…\"",
         "… belum diverifikasi — Verifikasi dimatikan di Setup"
       ],
       "actions": [
         {
           "endpointId": "verifikator.simpanVerifikasi",
-          "text": "Close verification on registration … before payment"
+          "text": "Tutup verifikasi registrasi … sebelum pembayaran"
         }
       ],
       "reads": [
@@ -617,7 +617,7 @@ export const rajalRuleCatalog: RuleCatalog = {
       "actions": [
         {
           "endpointId": "kasir.tampungBayar",
-          "text": "Stage payment for transaction …"
+          "text": "Tampung bayar transaksi …"
         }
       ],
       "reads": [

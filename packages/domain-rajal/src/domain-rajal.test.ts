@@ -487,7 +487,7 @@ describe('rajal dry-run', () => {
     });
 
     expect(result.state.nodes.validate_treatment!.status).toBe('needs_review');
-    expect(result.state.nodes.validate_treatment!.summary).toMatch(/No treatments matched filters/);
+    expect(result.state.nodes.validate_treatment!.summary).toMatch(/Tidak ada tindakan yang cocok dengan aturan/);
   });
 
   it('blocks when matching treatments are below the operator minimum', async () => {
@@ -1073,7 +1073,7 @@ describe('rajal SEP validation', () => {
 
     expect(result.state.nodes.validate_sep!.status).toBe('blocked');
     expect(result.state.nodes.validate_sep!.summary).toMatch(
-      /No RJTL SEP dated 2026-06-10 for poli PENYAKIT DALAM on transaction 01-200001/,
+      /Tidak ada SEP RJTL tanggal 2026-06-10 untuk poli PENYAKIT DALAM pada transaksi 01-200001/,
     );
     expect(result.state.nodes.submit_payment!.proposedMutations).toHaveLength(0);
     expect(mutatingCalls(transport)).toHaveLength(0);
@@ -1092,7 +1092,7 @@ describe('rajal SEP validation', () => {
     );
 
     expect(result.state.nodes.validate_sep!.status).toBe('blocked');
-    expect(result.state.nodes.validate_sep!.summary).toMatch(/No RJTL SEP dated 2026-06-10/);
+    expect(result.state.nodes.validate_sep!.summary).toMatch(/Tidak ada SEP RJTL tanggal 2026-06-10/);
   });
 
   it('blocks when the patient has no BPJS card number', async () => {
@@ -1102,7 +1102,7 @@ describe('rajal SEP validation', () => {
     );
 
     expect(result.state.nodes.validate_sep!.status).toBe('blocked');
-    expect(result.state.nodes.validate_sep!.summary).toBe('No BPJS card number for transaction 01-200001');
+    expect(result.state.nodes.validate_sep!.summary).toBe('No kartu BPJS kosong untuk transaksi 01-200001');
   });
 
   it('plans a SEP correction (never writes) when the transaction carries the wrong SEP', async () => {
@@ -1869,7 +1869,7 @@ describe('rajal auto-fetch runs', () => {
 
     const resolve = result.state.nodes.resolve_clinics!;
     expect(resolve.status).toBe('success');
-    expect(resolve.logs.some((log) => /Dropped discovered patient\(s\) seen under no selected poli/.test(log.message))).toBe(true);
+    expect(resolve.logs.some((log) => /Pasien dari laporan yang tidak ada di poli terpilih dibuang/.test(log.message))).toBe(true);
     expect(result.state.nodes.submit_payment!.proposedMutations).toHaveLength(0);
     expect(mutatingCalls(transport)).toHaveLength(0);
   });
@@ -2097,7 +2097,7 @@ describe('rajal ported guards', () => {
     const node = result.state.nodes.validate_exit_date!;
     expect(node.status).not.toBe('success');
     expect(node.status).toBe('needs_review');
-    expect(node.summary).toMatch(/Exit date unreadable on 1\/1 record\(s\): 01-200001/);
+    expect(node.summary).toMatch(/Tanggal keluar tidak terbaca pada 1\/1 kunjungan: 01-200001/);
   });
 
   it('fails the exit-date guard rather than passing when the read errors', async () => {
@@ -2399,7 +2399,7 @@ describe('rajal failed reads', () => {
 
     const node = result.state.nodes.check_verification!;
     expect(node.status).toBe('needs_review');
-    expect(node.summary).toMatch(/Verification status unreadable on 01-200001/);
+    expect(node.summary).toMatch(/Status verifikasi tidak terbaca pada 01-200001/);
     expect(result.state.edges.check_verification__submit_payment!.status).toBe('skipped');
   });
 
@@ -2422,7 +2422,7 @@ describe('rajal failed reads', () => {
 
     const node = result.state.nodes.check_payment!;
     expect(node.status).toBe('needs_review');
-    expect(node.summary).toMatch(/Payment state unreadable on 1\/1 record\(s\)/);
+    expect(node.summary).toMatch(/Status bayar tidak terbaca pada 1\/1 kunjungan/);
     expect(result.state.nodes.submit_payment!.proposedMutations).toHaveLength(0);
     expect(result.state.edges.check_payment__check_verification!.status).toBe('skipped');
   });
@@ -2463,7 +2463,7 @@ describe('rajal failed reads', () => {
     );
 
     expect(result.state.nodes.validate_treatment!.status).toBe('needs_review');
-    expect(result.state.nodes.validate_treatment!.summary).toMatch(/Treatment list unreadable on 01-200001/);
+    expect(result.state.nodes.validate_treatment!.summary).toMatch(/Daftar tindakan 01-200001 tidak terbaca|Daftar tindakan tidak terbaca pada 01-200001/);
   });
 
   it('fails the SEP step rather than reporting no SEP when the bridge is down', async () => {

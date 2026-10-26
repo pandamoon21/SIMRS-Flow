@@ -524,7 +524,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
       if (!discovery) {
         const ids = [...new Set((cfg.patientIds ?? []).map(formatPatientId).filter(Boolean))];
         ctx.scratch.ids = ids;
-        ctx.log(`Normalized ${ids.length} unique patient id(s)`);
+        ctx.log(`${ids.length} No RM unik dinormalisasi`);
         return ok(`${ids.length} No. RM unik`);
       }
 
@@ -571,7 +571,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
       const requested = (cfg.clinics ?? []).map((c) => c.trim().toUpperCase()).filter(Boolean);
       const inScope = keepSelectedClinicPatients(ids, clinicsByPatientId, requested).length;
       ctx.log(
-        `Report listed ${batch.stats.total} unpaid row(s); ${batch.stats.filtered} matched the filters`,
+        `Laporan berisi ${batch.stats.total} baris belum bayar; ${batch.stats.filtered} cocok dengan saringan`,
       );
       if (batch.excludedSections.length > 0) {
         ctx.log(`Penunjang/pharmacy section(s) excluded: ${batch.excludedSections.join(', ')}`, 'warn');
@@ -590,7 +590,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
           `Ditemukan ${inScope} pasien${scope} pada ${period}, melebihi batas ${cap} pasien untuk run ini — persempit periode, filter penjamin atau unit, atau naikkan batas dengan sengaja`,
         );
       }
-      ctx.log(`Discovered ${ids.length} unique patient id(s) across ${batch.clinics.length} clinic(s)`);
+      ctx.log(`Ditemukan ${ids.length} No RM unik di ${batch.clinics.length} poli`);
       return ok(`${ids.length} No. RM unik dari ${batch.stats.filtered} baris belum bayar`, {
         evidence: [
           { label: 'discovered patients', data: ids },
@@ -631,7 +631,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
       // dropped every discovered patient and the batch finished with no payment
       // plan at all. An ambiguous match is not a match — refusing to guess is
       // what legacy's resolver does.
-      const droppedNote = 'Dropped discovered patient(s) seen under no selected poli';
+      const droppedNote = 'Pasien dari laporan yang tidak ada di poli terpilih dibuang';
       if (batch && requested.length > 0) {
         const ids = get<string[]>(ctx, 'ids') ?? [];
         const kept = keepSelectedClinicPatients(ids, get<Record<string, string[]>>(ctx, 'clinicsByPatientId') ?? {}, clinics);
@@ -671,7 +671,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
           );
         } catch (err) {
           // Parity item 13: an unreadable read is "not read", never a crash.
-          ctx.log(`Visit history unreadable for ${patientId}: ${err instanceof Error ? err.message : String(err)}`, 'warn');
+          ctx.log(`Riwayat kunjungan ${patientId} tidak terbaca: ${err instanceof Error ? err.message : String(err)}`, 'warn');
           unreadable.push(patientId);
           continue;
         }
@@ -736,7 +736,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
         if (match.ambiguous) {
           ambiguous.push(`${r.no_transaksi} (${r.nama_unit ?? '?'} → ${match.matches.join(' | ')})`);
           ctx.log(
-            `Ambiguous clinic match, record skipped: ${r.nama_unit ?? '?'} → ${match.matches.join(' | ')}`,
+            `Poli kunjungan ambigu, kunjungan dilewati: ${r.nama_unit ?? '?'} → ${match.matches.join(' | ')}`,
             'warn',
           );
           continue;
@@ -870,9 +870,9 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
           );
         }
         const issues = [
-          ...(missing.length ? [`No exit date on ${missing.length} record(s): ${missing.join(', ')}`] : []),
+          ...(missing.length ? [`Tanggal keluar kosong pada ${missing.length} kunjungan: ${missing.join(', ')}`] : []),
           ...(unreadable.length
-            ? [`Exit date unreadable on ${unreadable.length}/${matching.length} record(s): ${unreadable.join(', ')}`]
+            ? [`Tanggal keluar tidak terbaca pada ${unreadable.length}/${matching.length} kunjungan: ${unreadable.join(', ')}`]
             : []),
         ];
         return {
@@ -915,7 +915,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
         } catch (err) {
           // Parity item 13: an unreadable read is "not read", never a crash.
           ctx.log(
-            `Visit tab unreadable on ${rec.no_transaksi}: ${err instanceof Error ? err.message : String(err)}`,
+            `Data kunjungan tidak terbaca pada ${rec.no_transaksi}: ${err instanceof Error ? err.message : String(err)}`,
             'warn',
           );
           unreadable.push(rec.no_transaksi);
@@ -966,7 +966,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
       if (dropped.size > 0) {
         pruneRajalRecords(ctx, dropped);
         ctx.log(
-          `Transaction check: ${transactions.length} Rawat Jalan, dropped ${dropped.size} (${issues.join('; ')})`,
+          `Cek jenis transaksi: ${transactions.length} Rawat Jalan, ${dropped.size} dibuang (${issues.join('; ')})`,
           transactions.length === 0 ? 'warn' : 'info',
         );
         if (transactions.length === 0) {
@@ -983,7 +983,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
           summary: `${transactions.length} transaksi Rawat Jalan; ${issues.join('; ')}`,
         };
       }
-      ctx.log(`Transaction check: ${transactions.length} Rawat Jalan transaction(s)`, 'info');
+      ctx.log(`Cek jenis transaksi: ${transactions.length} transaksi Rawat Jalan`, 'info');
       return ok(`${transactions.length} transaksi Rawat Jalan`);
     },
 
@@ -1044,7 +1044,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
         } catch (err) {
           // Parity item 13: an unreadable read is "not read", never a crash.
           review.push(
-            `Treatment list unreadable on ${rec.no_transaksi}: ${err instanceof Error ? err.message : String(err)}`,
+            `Daftar tindakan tidak terbaca pada ${rec.no_transaksi}: ${err instanceof Error ? err.message : String(err)}`,
           );
           dropped.add(rec.no_transaksi);
           continue;
@@ -1052,7 +1052,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
         // Legacy source line 898: a reply with no `rows` array is not an empty
         // bill, it is an unread bill.
         if (!Array.isArray(td?.rows)) {
-          review.push(`Treatment list unreadable on ${rec.no_transaksi}: response carried no rows`);
+          review.push(`Daftar tindakan ${rec.no_transaksi} tidak terbaca: jawaban tanpa baris`);
           dropped.add(rec.no_transaksi);
           continue;
         }
@@ -1107,7 +1107,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
           continue;
         }
         if (rows.length === 0) {
-          review.push(allRows.length === 0 ? `No treatments found on ${rec.no_transaksi}` : `No treatments matched filters on ${rec.no_transaksi}`);
+          review.push(allRows.length === 0 ? `Tidak ada tindakan pada ${rec.no_transaksi}` : `Tidak ada tindakan yang cocok dengan aturan pada ${rec.no_transaksi}`);
           dropped.add(rec.no_transaksi);
           continue;
         }
@@ -1437,7 +1437,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
         const card = normalizeCardNumber(rawCard);
         if (!card) {
           sepChecks.push({ label: sepLabel(record.no_transaksi), ok: false, detail: 'no kartu BPJS kosong / tidak ditemukan' });
-          hard.push(`No BPJS card number for transaction ${record.no_transaksi}`);
+          hard.push(`No kartu BPJS kosong untuk transaksi ${record.no_transaksi}`);
           dropped.add(record.no_transaksi);
           continue;
         }
@@ -1447,7 +1447,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
           rows = await fetchSepHistory(client, card, ctx);
         } catch (err) {
           sepChecks.push({ label: sepLabel(record.no_transaksi), ok: false, detail: 'riwayat SEP BPJS tidak terbaca' });
-          failed.push(`SEP history unreadable on ${record.no_transaksi}: ${err instanceof Error ? err.message : String(err)}`);
+          failed.push(`Riwayat SEP tidak terbaca pada ${record.no_transaksi}: ${err instanceof Error ? err.message : String(err)}`);
           dropped.add(record.no_transaksi);
           continue;
         }
@@ -1494,7 +1494,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
             }
             const sibling = siblingSeps[0];
             if (sibling) {
-              ctx.log(`Using sibling-clinic SEP ${sibling} for ${clinic}`, 'info');
+              ctx.log(`Memakai SEP poli serumpun ${sibling} untuk ${clinic}`, 'info');
               resolved = sibling;
             }
           }
@@ -1503,7 +1503,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
         if (!resolved) {
           sepChecks.push({ label: sepLabel(record.no_transaksi), ok: false, detail: `tidak ada SEP ${RAJAL_SEP_SERVICE_TYPE} tgl ${date} untuk poli ${candidates[0] ?? clinic}` });
           hard.push(
-            `No ${RAJAL_SEP_SERVICE_TYPE} SEP dated ${date} for poli ${candidates[0] ?? clinic} on transaction ${record.no_transaksi}`,
+            `Tidak ada SEP ${RAJAL_SEP_SERVICE_TYPE} tanggal ${date} untuk poli ${candidates[0] ?? clinic} pada transaksi ${record.no_transaksi}`,
           );
           dropped.add(record.no_transaksi);
           continue;
@@ -1520,10 +1520,10 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
             id: `${ctx.runId}:rekamMedis.simpanSep:${record.no_transaksi}`,
             endpointId: 'rekamMedis.simpanSep',
             riskLevel: 'high',
-            reason: `Correct SEP on transaction ${record.no_transaksi}: ${current || '(kosong)'} → ${resolved}`,
+            reason: `Koreksi SEP pada transaksi ${record.no_transaksi}: ${current || '(kosong)'} → ${resolved}`,
             preconditions: [
               {
-                description: `${RAJAL_SEP_SERVICE_TYPE} SEP exists for the visit date and poli tujuan`,
+                description: `SEP ${RAJAL_SEP_SERVICE_TYPE} ada untuk tanggal kunjungan dan poli tujuan`,
                 check: 'pendaftaran.getRiwayatSep',
                 // The replay read is keyed on the BPJS card, not on the plan's
                 // payload — without this it would be handed the SEP write's own
@@ -1540,7 +1540,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
             requiresApproval: true,
             idempotencyKey: `${ctx.runId}:${record.no_transaksi}:sep`,
             readAfterWriteCheck: {
-              description: 'SEP history carries the corrected SEP',
+              description: 'Riwayat SEP memuat SEP hasil koreksi',
               // `kasir.getDataTransaksi` answers with an empty body on this
               // backend, so a successful write was reported as `failed`. The
               // guard's own read (`pendaftaran.getRiwayatSep`, keyed on the
@@ -1708,14 +1708,14 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
       ctx.scratch.payable = payable;
       if (dropped.size > 0) pruneRajalRecords(ctx, dropped);
       ctx.log(
-        `Payment check: ${payable.length} payable, ${paid} already paid${unreadable.length ? `, ${unreadable.length} unreadable` : ''}`,
+        `Cek pembayaran: ${payable.length} bisa dibayar, ${paid} sudah dibayar${unreadable.length ? `, ${unreadable.length} unreadable` : ''}`,
         unreadable.length > 0 ? 'warn' : 'info',
       );
       if (unreadable.length > 0) {
         return withPayReasoning({
           status: 'needs_review',
           summary: payable.length === 0
-            ? `Payment state unreadable on ${unreadable.length}/${treatments.length} record(s): ${unreadable.join(', ')}`
+            ? `Status bayar tidak terbaca pada ${unreadable.length}/${treatments.length} kunjungan: ${unreadable.join(', ')}`
             : `${payable.length}/${treatments.length} payable record(s); payment state unreadable on ${unreadable.length}: ${unreadable.join(', ')}`,
           branches: { check_payment__check_verification: payable.length > 0 ? 'take' : 'block' },
         });
@@ -1851,7 +1851,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
         // read, and legacy's `else` branch would have called it "verified" and
         // paid — so refuse to interpret it.
         if (!/^\d+$/.test(status)) {
-          review.push(`Verification status unreadable on ${record.no_transaksi}: "${status.slice(0, 40)}"`);
+          review.push(`Status verifikasi tidak terbaca pada ${record.no_transaksi}: "${status.slice(0, 40)}"`);
           dropped.add(record.no_transaksi);
           continue;
         }
@@ -1869,19 +1869,19 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
           id: `${ctx.runId}:verifikator.simpanVerifikasi:${record.no_transaksi}`,
           endpointId: 'verifikator.simpanVerifikasi',
           riskLevel: 'critical',
-          reason: `Close verification on registration ${record.no_registrasikunjungan} before payment`,
+          reason: `Tutup verifikasi registrasi ${record.no_registrasikunjungan} sebelum pembayaran`,
           // Each check names the body it must be replayed with: the plan's own
           // payload is `{no_registrasikunjungan}`, which would not address the
           // transaction-scoped reads.
           preconditions: [
             {
-              description: 'Verification still open',
+              description: 'Verifikasi masih terbuka',
               check: 'kasir.cekStatusVerifikasi',
               payload: { no_transaksi: record.no_transaksi },
               expected: '0',
             },
             {
-              description: 'No unserved orders',
+              description: 'Tidak ada order belum terlayani',
               check: 'kasir.cekOrderBelumTerlayani',
               payload: orderArgs,
               // A clean registration answers `{}` or `{total: 0}` — both are
@@ -1891,14 +1891,14 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
               expected: 0,
             },
             {
-              description: 'No untransferred orders',
+              description: 'Tidak ada order belum ditransfer',
               check: 'kasir.cekOrderBelumTransfer',
               payload: orderArgs,
               match: 'empty',
               expected: 0,
             },
             {
-              description: 'No unverified penunjang transaction',
+              description: 'Tidak ada transaksi penunjang belum diverifikasi',
               check: 'verifikator.cekTransaksiPenunjang',
               payload: { no_registrasikunjungan: record.no_registrasikunjungan },
               match: 'empty',
@@ -1911,7 +1911,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
           idempotencyKey: `${ctx.runId}:${record.no_transaksi}:verifikasi`,
           readAfterWriteChecks: [
             {
-              description: 'Verification status closes',
+              description: 'Status verifikasi tertutup',
               endpointId: 'kasir.cekStatusVerifikasi',
               payload: { no_transaksi: record.no_transaksi },
               // The endpoint answers with a bare "0"/"1", not an object — an empty
@@ -1921,7 +1921,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
               expected: '1',
             },
             {
-              description: 'No unserved orders after verification',
+              description: 'Tidak ada order belum terlayani setelah verifikasi',
               endpointId: 'kasir.cekOrderBelumTerlayani',
               payload: orderArgs,
               field: '',
@@ -1929,7 +1929,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
               expected: 0,
             },
             {
-              description: 'No untransferred orders after verification',
+              description: 'Tidak ada order belum ditransfer setelah verifikasi',
               endpointId: 'kasir.cekOrderBelumTransfer',
               payload: orderArgs,
               field: '',
@@ -1937,7 +1937,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
               expected: 0,
             },
             {
-              description: 'No unverified penunjang transaction after verification',
+              description: 'Tidak ada transaksi penunjang belum diverifikasi setelah verifikasi',
               endpointId: 'verifikator.cekTransaksiPenunjang',
               payload: { no_registrasikunjungan: record.no_registrasikunjungan },
               field: '',
@@ -2052,7 +2052,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
           id: `${ctx.runId}:kasir.tampungBayar:${record.no_transaksi}`,
           endpointId: 'kasir.tampungBayar',
           riskLevel: 'critical',
-          reason: `Stage payment for transaction ${record.no_transaksi}`,
+          reason: `Tampung bayar transaksi ${record.no_transaksi}`,
           // These are the checks that actually guard `tampung_bayar`, in the
           // order legacy runs them (source lines 999-1018) plus the Python's
           // payment-history guard (ranap_v3.py:3799). The previous port asserted
@@ -2073,7 +2073,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
               // endpoint only after `cekstatus_verifikasi` reads "1". Approving a
               // payment against a still-open verification stages money on a
               // bill nobody closed.
-              description: 'Verification already closed',
+              description: 'Verifikasi sudah tertutup',
               check: 'kasir.cekStatusVerifikasi',
               payload: { no_transaksi: record.no_transaksi },
               field: '',
@@ -2084,7 +2084,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
               // `kasir.getJumlahBayar` is dead on this backend; the billed lines
               // carry the paid flag. Re-read them at write time and require every
               // line still unpaid — an empty bill fails closed (allEquals).
-              description: 'Not already paid (no line flagged paid)',
+              description: 'Belum dibayar (tidak ada baris bertanda lunas)',
               check: 'poliklinik.getListTindakan',
               payload: {
                 no_transaksi: record.no_transaksi,
@@ -2096,7 +2096,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
               expected: 'Belum',
             },
             {
-              description: 'No payment history yet',
+              description: 'Belum ada riwayat pembayaran',
               check: 'kasir.getHistoryPembayaran',
               // A GET: its parameters travel in the query string or vanish.
               query: {
@@ -2106,21 +2106,21 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
               expected: [],
             },
             {
-              description: 'No unserved orders',
+              description: 'Tidak ada order belum terlayani',
               check: 'kasir.cekOrderBelumTerlayani',
               payload: orderArgs,
               match: 'empty',
               expected: 0,
             },
             {
-              description: 'No untransferred orders',
+              description: 'Tidak ada order belum ditransfer',
               check: 'kasir.cekOrderBelumTransfer',
               payload: orderArgs,
               match: 'empty',
               expected: 0,
             },
             {
-              description: 'No unverified penunjang transaction',
+              description: 'Tidak ada transaksi penunjang belum diverifikasi',
               check: 'verifikator.cekTransaksiPenunjang',
               payload: { no_registrasikunjungan: record.no_registrasikunjungan },
               match: 'empty',
@@ -2132,7 +2132,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
           requiresApproval: true,
           idempotencyKey: `${ctx.runId}:${record.no_transaksi}`,
           readAfterWriteCheck: {
-            description: 'Payment history becomes non-empty',
+            description: 'Riwayat pembayaran terisi',
             endpointId: 'kasir.getHistoryPembayaran',
             query: {
               no_registrasikunjungan: record.no_registrasikunjungan,
@@ -2201,10 +2201,10 @@ async function fetchSepHistory(
         { signal: ctx.signal },
       );
       if (Array.isArray(res)) return res;
-      lastError = new Error('SEP history response was not an array');
+      lastError = new Error('Jawaban riwayat SEP bukan daftar');
     } catch (err) {
       lastError = err;
-      ctx.log(`SEP history attempt ${attempt}/${RAJAL_SEP_HISTORY_ATTEMPTS} failed`, 'warn');
+      ctx.log(`Percobaan riwayat SEP ${attempt}/${RAJAL_SEP_HISTORY_ATTEMPTS} gagal`, 'warn');
     }
     if (ctx.signal.aborted) break;
   }
