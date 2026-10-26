@@ -166,7 +166,7 @@ export function terminalRows(definition: WorkflowDefinition, state: RunState | u
       rows.push({ kind: 'line', key: `l${entry.seq}`, entry });
       previousSeq = entry.seq;
     }
-    if (options.checks) rows.push(...checkRows(node.id, reasoningOf(node.evidence), options.summary));
+    if (options.checks) rows.push(...checkRows(node.id, reasoningOf(node.evidence), options.summary, state?.mutations));
     for (const [i, decision] of decisionsOf(node.id, state, autoRun).entries()) rows.push({ kind: 'decision', key: `x:${node.id}:${i}`, decision });
     const duration = durationOf(node);
     const settled = !['running', 'retrying', 'queued', 'gate_waiting'].includes(node.status);
@@ -262,8 +262,25 @@ const CHECK_PROBLEM_CAP = 25;
  * (up to a cap) and the ✓ / • / → ones collapse into one count row. Each
  * patient's full trail lives in the per-patient view.
  */
-function checkRows(nodeId: string, reasoning: ReturnType<typeof reasoningOf>, summary = false): TermRow[] {
-  const items = reasoning?.items ?? [];
+/**
+ * A checklist ✗ that a write is fixing reads by that write's real outcome: once
+ * verified it is ✓ (as on the canvas), a failed/refused write is a plain ✗.
+ * Without this a paid patient's Tampung Bayar line stayed red in the log.
+ */
+export function resolvePlanItem(item: ReasoningItem, mutations: Record<string, MutationOutcome> = {}): ReasoningItem {
+  if (!item.planId) return item;
+  const status = mutations[item.planId]?.status;
+  const note = (text: string) => (item.detail ? `${item.detail} · ${text}` : text);
+  if (status === 'verified') return { ...item, ok: true, detail: note('terverifikasi') };
+  if (status === 'failed' || status === 'invalidated') {
+    const { planId: _planId, ...rest } = item;
+    return { ...rest, ok: false, detail: note(status === 'failed' ? 'write gagal' : 'dibatalkan (syarat berubah)') };
+  }
+  return item;
+}
+
+function checkRows(nodeId: string, reasoning: ReturnType<typeof reasoningOf>, summary = false, mutations: Record<string, MutationOutcome> = {}): TermRow[] {
+  const items = (reasoning?.items ?? []).map((item) => resolvePlanItem(item, mutations));
   const title = reasoning?.title;
   const row = (item: ReasoningItem, i: number | string, first: boolean): TermRow => ({ kind: 'check', key: `c:${nodeId}:${i}`, nodeId, item, ...(first && title ? { title } : {}) });
   if (items.length <= (summary ? 1 : CHECK_LIST_LIMIT)) return items.map((item, i) => row(item, i, i === 0));
@@ -320,7 +337,7 @@ export function patientTrails(definition: WorkflowDefinition, state: RunState | 
   const byRm = new Map<string, TrailItem[]>();
   const nodes = [...definition.nodes].sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
   for (const node of nodes) {
-    const items = reasoningOf(state.nodes[node.id]?.evidence)?.items ?? [];
+    const items = (reasoningOf(state.nodes[node.id]?.evidence)?.items ?? []).map((item) => resolvePlanItem(item, state.mutations));
     for (const item of items) {
       if (!item.subject) continue;
       const trail = byRm.get(item.subject) ?? byRm.set(item.subject, []).get(item.subject)!;

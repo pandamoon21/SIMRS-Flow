@@ -109,3 +109,15 @@ describe('run node card projection', () => {
     })).toContain('2 poli, 3 pasien');
   });
 });
+
+describe('planned checklist items in the log', () => {
+  it('read as done once their write verified, as a plain failure when it failed', async () => {
+    const { resolvePlanItem } = await import('./features/panels/terminalLog.js');
+    const item = { label: 'Tampung bayar 01-1', ok: false, detail: 'belum dibayar → tampung bayar', planId: 'p1' };
+    expect(resolvePlanItem(item, {})).toBe(item);
+    expect(resolvePlanItem(item, { p1: { planId: 'p1', endpointId: 'e', status: 'verified' } } as any)).toMatchObject({ ok: true, detail: 'belum dibayar → tampung bayar · terverifikasi' });
+    const failed = resolvePlanItem(item, { p1: { planId: 'p1', endpointId: 'e', status: 'failed' } } as any);
+    expect(failed).toMatchObject({ ok: false, detail: 'belum dibayar → tampung bayar · write gagal' });
+    expect('planId' in failed).toBe(false);
+  });
+});

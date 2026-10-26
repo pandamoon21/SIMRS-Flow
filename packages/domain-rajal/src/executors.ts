@@ -2152,11 +2152,17 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
       return { status: 'needs_review', summary, proposedMutations: plans, ...(plans.length ? { needsReplan: true } : {}) };
     },
 
-    'rajal.confirmResult': () => ok('Konfirmasi hasil menunggu mode write'),
+    'rajal.confirmResult': (ctx) => {
+      if (ctx.mode !== 'write') return ok('Preview — tidak ada pembayaran untuk dikonfirmasi');
+      const { verified, bad, open } = paymentTally(ctx);
+      const summary = [`${verified} pembayaran terverifikasi`, bad ? `${bad} gagal — cek manual di SIMRS` : '', open ? `${open} belum selesai` : ''].filter(Boolean).join('; ');
+      return bad || open ? { status: 'needs_review', summary } : ok(summary);
+    },
 
     'rajal.emitPatientSummary': (ctx) => {
       const matching = get<RajalRecordRow[]>(ctx, 'matching') ?? [];
-      return ok(`Pasien diproses: ${matching.length} kunjungan ditinjau (preview)`);
+      if (ctx.mode !== 'write') return ok(`Pasien diproses: ${matching.length} kunjungan ditinjau (preview)`);
+      return ok(`Pasien diproses: ${matching.length} kunjungan; ${paymentTally(ctx).verified} dibayar`);
     },
 
     'rajal.emitBatchSummary': (ctx) => {
@@ -2173,7 +2179,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
           row.status === 'lolos' ? 'info' : 'warn',
         );
       }
-      const mode = ctx.mode === 'write' ? 'write: lihat rencana Tampung Bayar' : 'hanya preview — tidak ada write yang diterapkan';
+      const mode = ctx.mode === 'write' ? `write: ${paymentTally(ctx).verified} pembayaran terverifikasi` : 'hanya preview — tidak ada write yang diterapkan';
       const summary = `Antrean selesai: ${passed} lolos, ${skippedCount} dilewati dari ${total} pasien; ${mode}`;
       ctx.log(summary, 'info');
       const result = ok(summary, { evidence: [{ label: 'rajal.patient-outcomes', source: 'emit_batch_summary', data: { rows: outcomes } }] });
@@ -2424,20 +2430,58 @@ const RAJAL_CHECKLISTS: Record<string, ChecklistBuilder> = {
       planId: plan.id,
     })),
   }),
-  confirmResult: () => ({ title: 'Konfirmasi hasil', items: [{ label: 'Konfirmasi hasil bayar', ok: null, detail: 'ditunda ke mode write' }] }),
+  confirmResult: ({ ctx }) => ({
+    title: 'Konfirmasi hasil',
+    items: ctx.mode !== 'write'
+      ? [{ label: 'Konfirmasi hasil bayar', ok: null, detail: 'preview — tidak ada pembayaran' }]
+      : Object.entries(paymentStatusByTrx(ctx)).map(([trx, status]): ReasoningItem => ({
+        label: `Tampung bayar ${trx}`,
+        ok: status === 'verified' ? true : status === 'failed' || status === 'invalidated' ? false : null,
+        detail: PAYMENT_STATUS_TEXT[status] ?? status,
+      })),
+  }),
   emitPatientSummary: ({ ctx }) => {
     const payable = new Set(recordsIn(ctx, 'payable').map((record) => record.no_transaksi));
-    return { title: 'Ringkasan pasien', items: recordsIn(ctx, 'matching').map((record): ReasoningItem => ({
-      label: recordLabel(record),
-      ok: null,
-      detail: payable.has(record.no_transaksi) ? 'siap tampung bayar' : 'tidak perlu dibayar',
-    })) };
+    const paid = ctx.mode === 'write' ? paymentStatusByTrx(ctx) : {};
+    return { title: 'Ringkasan pasien', items: recordsIn(ctx, 'matching').map((record): ReasoningItem => {
+      const status = paid[record.no_transaksi];
+      return {
+        label: recordLabel(record),
+        ok: status === 'verified' ? true : status === 'failed' || status === 'invalidated' ? false : null,
+        detail: status ? (PAYMENT_STATUS_TEXT[status] ?? status) : payable.has(record.no_transaksi) ? (ctx.mode === 'write' ? 'tidak ditampung bayar' : 'siap tampung bayar') : 'tidak perlu dibayar',
+      };
+    }) };
   },
   emitBatchSummary: ({ ctx }) => ({ title: `Ringkasan batch · ${get<number>(ctx, 'batchTotal') ?? 0} pasien · ${ctx.mode === 'write' ? 'write' : 'preview — tidak ada write'}`, items: patientOutcomes(ctx).map((row): ReasoningItem => ({
     label: row.patientId,
     ok: row.status === 'lolos',
     detail: row.status === 'lolos' ? `lolos semua cek${row.clinics.length ? ` · ${row.clinics.join(', ')}` : ''}` : `dilewati${row.step ? ` di ${stepLabel(row.step)}` : ''}: ${row.reason}`,
   })) }),
+};
+
+/** Outcome of each staged payment of this run, by transaction (write runs). */
+function paymentStatusByTrx(ctx: ExecutorContext): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const id of (ctx.scratch.paymentPlanIds as string[] | undefined) ?? []) {
+    out[id.split(':').pop() ?? id] = ctx.mutations[id]?.status ?? 'planned';
+  }
+  return out;
+}
+
+function paymentTally(ctx: ExecutorContext): { verified: number; bad: number; open: number } {
+  const statuses = Object.values(paymentStatusByTrx(ctx));
+  const verified = statuses.filter((s) => s === 'verified').length;
+  const bad = statuses.filter((s) => s === 'failed' || s === 'invalidated').length;
+  return { verified, bad, open: statuses.length - verified - bad };
+}
+
+const PAYMENT_STATUS_TEXT: Record<string, string> = {
+  verified: 'sudah ditampung bayar (terverifikasi)',
+  applied: 'ditulis, belum terverifikasi — cek di SIMRS',
+  failed: 'tampung bayar gagal — cek manual di SIMRS',
+  invalidated: 'tidak dibayar — syarat berubah (mis. sudah dibayar dari tempat lain)',
+  approved: 'disetujui, belum ditulis',
+  planned: 'direncanakan',
 };
 
 function withRajalChecklists(registry: ExecutorRegistry): ExecutorRegistry {

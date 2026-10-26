@@ -639,7 +639,7 @@ export const rajalRuleCatalog: RuleCatalog = {
       "outcomes": [
         {
           "status": "success",
-          "text": "Konfirmasi hasil menunggu mode write"
+          "text": "Preview — tidak ada pembayaran untuk dikonfirmasi"
         }
       ],
       "issues": [],
@@ -655,6 +655,10 @@ export const rajalRuleCatalog: RuleCatalog = {
         {
           "status": "success",
           "text": "Pasien diproses: … kunjungan ditinjau (preview)"
+        },
+        {
+          "status": "success",
+          "text": "Pasien diproses: … kunjungan; … dibayar"
         }
       ],
       "issues": [],

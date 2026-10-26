@@ -109,3 +109,27 @@ describe('ranap cleanup-only run (Verifikasi off)', () => {
     expect(state.status).toBe('completed');
   });
 });
+
+describe('rajal outcome wording follows the real payment result', () => {
+  const AUTH = { authorization: 'Bearer t' };
+  const run = async (mode: 'preview' | 'write') => {
+    const app = buildServer({ ledger: new MemoryLedger(), qaAuth: { token: 't', operator: 'op' } });
+    const created = await app.inject({ method: 'POST', url: '/api/runs', headers: AUTH, payload: {
+      workflowId: rajalWorkflow.id, mode, ...(mode === 'write' ? { autoApprove: true } : {}),
+      input: { patientIds: ['012345'], clinics: ['PENYAKIT DALAM'], date: '2026-06-10' },
+    } });
+    return (app as any).runService.waitFor(created.json().runId);
+  };
+
+  it('preview says there is nothing to confirm', async () => {
+    const state = await run('preview');
+    expect(state.nodes.confirm_result.summary).toBe('Preview — tidak ada pembayaran untuk dikonfirmasi');
+  });
+
+  it('write reports what happened to each payment (fixtures never read back as paid)', async () => {
+    const state = await run('write');
+    expect(state.nodes.confirm_result.status).toBe('needs_review');
+    expect(state.nodes.confirm_result.summary).toMatch(/0 pembayaran terverifikasi; 1 gagal — cek manual di SIMRS/);
+    expect(state.nodes.emit_batch_summary.summary).toMatch(/write: 0 pembayaran terverifikasi/);
+  });
+});
