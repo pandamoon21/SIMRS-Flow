@@ -3,7 +3,7 @@
 // canvas, then saves a screenshot and the per-node {label,status} list.
 //
 //   Offline (fixture replay, QA login):
-//     node scripts/qa-run-live.mjs --offline --domain ranap [--theme light]
+//     node scripts/qa-run-live.mjs --offline --domain ranap [--theme light] [--size 1366x768]
 //   Live preview (real SIMRS, read-only):
 //     PILOT_USERNAME=<user>  (password: copy it to the Windows clipboard first)
 //     node scripts/qa-run-live.mjs --domain ranap --rm <no-rm> --date YYYY-MM-DD
@@ -34,7 +34,8 @@ const PORT = 9337;
 const TIMEOUT_S = Number(args.timeout ?? 300);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const mask = (text) => String(text).replace(/\d-\d{2}-\d{2}-\d{2}/g, '#-##-##-##');
-const tag = `${offline ? 'offline' : 'ui'}-${domain}-${args.theme ?? 'dark'}${args.rm ? `-${args.rm.replace(/\D/g, '').slice(-2)}` : ''}`;
+const size = /^\d+x\d+$/.test(args.size ?? '') ? args.size : '1600x900';
+const tag = `${offline ? 'offline' : 'ui'}-${domain}-${args.theme ?? 'dark'}${args.rm ? `-${args.rm.replace(/\D/g, '').slice(-2)}` : ''}${args.size ? `-${size}` : ''}`;
 
 function clipboardPassword() {
   // LIVE_PASS (from the gitignored .env) wins; otherwise read the clipboard once, then clear it.
@@ -45,7 +46,7 @@ function clipboardPassword() {
   ], { windowsHide: true }).toString().replace(/\r?\n$/, '');
 }
 
-const chrome = spawn(SHELL, ['--headless', '--disable-gpu', '--no-first-run', '--window-size=1600,900', `--remote-debugging-port=${PORT}`, 'about:blank'], { stdio: 'ignore' });
+const chrome = spawn(SHELL, ['--headless', '--disable-gpu', '--no-first-run', `--window-size=${size.replace('x', ',')}`, `--remote-debugging-port=${PORT}`, 'about:blank'], { stdio: 'ignore' });
 process.on('exit', () => chrome.kill());
 
 let targets = [];
@@ -98,7 +99,8 @@ async function fill(selector, value) {
 
 await send('Page.enable');
 await send('Runtime.enable');
-await send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 900, deviceScaleFactor: 1, mobile: false });
+const [vw, vh] = size.split('x').map(Number);
+await send('Emulation.setDeviceMetricsOverride', { width: vw, height: vh, deviceScaleFactor: 1, mobile: false });
 await send('Page.navigate', { url: APP });
 await sleep(1500);
 await evaluate(`(${args.theme === 'light'} ? localStorage.removeItem('simrs-flow-theme') : localStorage.setItem('simrs-flow-theme','dark')), sessionStorage.clear(), localStorage.removeItem('simrs-flow.token'), localStorage.removeItem('simrs-flow.run.panels.v1'), 'ok'`);
@@ -162,7 +164,7 @@ await clickButton('^Fit$');
 await sleep(900);
 await shot(`${tag}.png`);
 const stopDisabled = await evaluate(`document.querySelector('.run-cancel-btn')?.disabled ?? null`);
-await clickButton('^Center$');
+await clickButton('^Center$').catch(() => null); // removed from newer toolbars
 await sleep(700);
 await shot(`${tag}-zoom.png`);
 const nodes = await evaluate(`[...document.querySelectorAll('[data-testid=wf-node]')].map((el) => ({
@@ -174,9 +176,19 @@ const overlaps = await evaluate(`(() => {
   let n = 0; for (let i = 0; i < r.length; i++) for (let j = i + 1; j < r.length; j++) {
     const a = r[i], b = r[j]; if (a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1) n++; }
   return n; })()`);
+// Ringkasan vs replay bar / canvas: overlap in px (0 = clear).
+const summaryFit = await evaluate(`(() => {
+  const s = document.querySelector('.run-summary')?.getBoundingClientRect();
+  const b = document.querySelector('.replay-bar')?.getBoundingClientRect();
+  const c = document.querySelector('.canvas-wrap')?.getBoundingClientRect();
+  if (!s) return { summary: 'absent' };
+  const r = (x) => x && ({ top: Math.round(x.top), bottom: Math.round(x.bottom), h: Math.round(x.height) });
+  return { viewport: innerWidth + 'x' + innerHeight, scrollH: document.scrollingElement.scrollHeight, summary: r(s), bar: r(b), canvas: r(c), overlapBar: b ? Math.max(0, Math.round(s.bottom - b.top)) : 0, outsideCanvas: c ? Math.max(0, Math.round(c.top - s.top), Math.round(s.bottom - c.bottom)) : 0 };
+})()`);
 const headers = await evaluate(`[...document.querySelectorAll('.phase-header-name')].map((x) => x.textContent.trim())`);
 const edgeLabels = await evaluate(`[...document.querySelectorAll('.react-flow__edge-text')].map((x) => x.textContent.trim())`);
-writeFileSync(join(OUT, `${tag}.json`), mask(JSON.stringify({ status, stopDisabled, nodes, overlaps, headers, edgeLabels }, null, 2)));
+writeFileSync(join(OUT, `${tag}.json`), mask(JSON.stringify({ size, summaryFit, status, stopDisabled, nodes, overlaps, headers, edgeLabels }, null, 2)));
+console.log(`summaryFit=${JSON.stringify(summaryFit)}`);
 console.log(`stopDisabled=${stopDisabled} nodes=${nodes.length} overlaps=${overlaps} phases=${headers.length} edgeLabels=${edgeLabels.join(',') || '-'}`);
 console.log(`saved: .data/live/${tag}.json`);
 ws.close();
