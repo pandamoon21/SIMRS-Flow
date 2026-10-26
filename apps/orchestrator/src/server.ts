@@ -39,9 +39,9 @@ import type { BerkasReaderPort } from '@simrs-flow/domain-ranap';
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { hostname, networkInterfaces } from 'node:os';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { accessUrls, dirStats, fileStats, safeUrl } from './config.js';
 import { FileLedger, type Ledger } from '@simrs-flow/audit-ledger';
 import { EvoMedisClient, FetchTransport, LoginFailedError } from '@simrs-flow/evomedis-client';
@@ -49,6 +49,7 @@ import { fetchRajalUnpaidBatch } from '@simrs-flow/domain-rajal';
 import { buildRanapDischargeQuery, parseRanapDischargeReport, type RanapReportFlag } from '@simrs-flow/domain-ranap';
 import { ReloginTransport } from './reloginTransport.js';
 import { NaikKelasStore, sheetCsvExportUrl } from './naikKelas.js';
+import { billingSummary, summarizeRun, type RunDashboardPart } from './dashboard.js';
 import type { WorkflowEvent } from '@simrs-flow/workflow-core';
 import { RunService, type CreateRunInput, type LiveConfig } from './RunService.js';
 import { getWorkflow, listWorkflows } from './registry.js';
@@ -95,12 +96,14 @@ export interface ServerOptions {
   /** Add Secure to the browser session cookie (required behind production HTTPS). */
   secureCookies?: boolean;
   uiDir?: string;
-  /** Iur naik kelas snapshot store; defaults to a memory-only store on the built-in sheet. */
+  /** Iur naik kelas snapshot store; defaults to a memory-only store with no sheet. */
   naikKelas?: NaikKelasStore;
   /** Claim bundle reader for the opt-in Kelengkapan Berkas run step. */
   berkas?: BerkasReaderPort;
   /** Non-secret host facts for the Settings page (from main.ts env wiring). */
   about?: HostAbout;
+  /** Team sticky notes (JSON). Unset = memory only (tests). */
+  notesFile?: string;
 }
 
 export interface HostAbout {
@@ -254,91 +257,71 @@ export function buildServer(options: ServerOptions): FastifyInstance {
     };
   });
 
-  // Dashboard reads. Deterministic placeholders for now — swap the bodies for a
-  // real query (billing ledger / patient store) without touching the UI.
+  // Dashboard reads, derived from the audit ledger (see dashboard.ts). A
+  // finished run's file never changes, so its part is computed once; the
+  // naik kelas list is part of the key because it changes the category.
+  const dashboardCache = new Map<string, { naikKelasAt: string; part: RunDashboardPart }>();
+  const dashboardParts = async (): Promise<RunDashboardPart[]> => {
+    const snapshot = naikKelas.status().snapshot;
+    const naikKelasAt = snapshot?.fetchedAt ?? '';
+    const naikKelasRm = new Set((snapshot?.rows ?? []).map((row) => row.noRm));
+    const parts = await Promise.all((await options.ledger.listRuns()).map(async (runId) => {
+      const cached = dashboardCache.get(runId);
+      if (cached && cached.naikKelasAt === naikKelasAt) return cached.part;
+      const history = await options.ledger.readHistory(runId).catch(() => undefined);
+      if (!history) return undefined;
+      const live = service.isLive(runId);
+      const part = summarizeRun(history, naikKelasRm, live);
+      if (!live && history.status !== 'interrupted') dashboardCache.set(runId, { naikKelasAt, part });
+      return part;
+    }));
+    return parts.filter((part): part is RunDashboardPart => Boolean(part));
+  };
+
   app.get('/api/billing/summary', async (req, reply) => {
     if (!requireRead(req, reply)) return reply;
-    const now = new Date();
-    const seed = [214, 339, 182, 416, 128, 473, 381, 557, 429, 612, 498, 684, 576, 482];
-    const days = seed.map((v, i) => {
-      const d = new Date(now);
-      d.setDate(now.getDate() - (seed.length - 1 - i));
-      return { date: d.toISOString().slice(0, 10), amount: v * 100_000 };
-    });
-    // `demo` tells the UI to label these numbers; drop it when the real query lands.
-    return { demo: true, days, titipanToday: 7, naikKelasToday: 12, gate: { approved: 71, rejected: 8, pending: 3 } };
+    return billingSummary(await dashboardParts(), new Date());
   });
 
   app.get('/api/patients', async (req, reply) => {
     if (!requireRead(req, reply)) return reply;
-    const now = new Date();
-    const names = [
-      'A. Wijaya', 'S. Rahmawati', 'B. Santoso', 'D. Kusuma', 'E. Hartono', 'F. Lestari',
-      'G. Pratama', 'H. Anggraini', 'I. Nugroho', 'J. Maharani', 'K. Setiawan', 'L. Puspita',
-      'M. Firmansyah', 'N. Handayani', 'O. Saputra', 'P. Wulandari', 'Q. Ramadhan', 'R. Safitri',
-      'S. Kurniawan', 'T. Melati', 'U. Hidayat', 'V. Anggita', 'W. Permana', 'X. Cahyani',
-    ];
-    const categories = [
-      ...Array<'titipan' | 'naik_kelas' | 'normal'>(7).fill('titipan'),
-      ...Array<'titipan' | 'naik_kelas' | 'normal'>(12).fill('naik_kelas'),
-      ...Array<'titipan' | 'naik_kelas' | 'normal'>(5).fill('normal'),
-    ];
-    const operators = ['Siti Nurhaliza', 'Budi Prasetyo', 'Rina Kartika', 'Agus Salim', 'Dewi Anjani'];
-    // ~400 days × 3 patients so the Rekap week/month/year views have data.
-    const patients = Array.from({ length: 1200 }, (_, i) => {
-      const name = names[(i * 5) % names.length] ?? names[0];
-      const category = categories[(i * 7) % categories.length] ?? 'normal';
-      const workflow = i % 3 === 0 ? 'rajal' : 'ranap';
-      const d = new Date(now);
-      d.setDate(now.getDate() - Math.floor(i / 3));
-      const date = d.toISOString().slice(0, 10);
-      const wobble = (i * 37) % 23;
-      const nominal =
-        category === 'titipan' ? (180 + wobble * 17) * 1000 :
-        category === 'naik_kelas' ? (320 + wobble * 23) * 1000 :
-        (90 + wobble * 7) * 1000;
-      const status = category === 'titipan' && i % 3 === 1 && i < 30 ? 'needs_review' : 'done';
-      const rm = `0-${String(30 + (i % 30)).padStart(2, '0')}-${String(10 + ((i * 7) % 90)).padStart(2, '0')}-${String(10 + ((i * 13) % 90)).padStart(2, '0')}`;
-      const operator = operators[i % operators.length] ?? operators[0];
-      const minuteOfDay = (i * 97 + 431) % (24 * 60);
-      const hh = Math.floor(minuteOfDay / 60);
-      const mm = minuteOfDay % 60;
-      const time = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
-      const shiftMin = hh * 60 + mm;
-      const shift = shiftMin >= 7 * 60 && shiftMin < 14 * 60 ? 1 : shiftMin >= 14 * 60 && shiftMin < 20 * 60 ? 2 : 3;
-      return { noRm: rm, name: `Pasien ${name}`, workflow, date, category, nominal, status, operator, time, shift, runId: `rn_${date.replace(/-/g, '')}_${workflow}_${String(i + 1).padStart(3, '0')}` };
-    });
-    return { demo: true, patients };
+    const patients = (await dashboardParts()).flatMap((part) => part.patients)
+      .sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`));
+    return { patients };
   });
 
-  // ── Presence & sticky notes (in-memory, demo scope) ─────────────────
-  // Lightweight collaboration layer for the Overview page: who is active and
-  // shared sticky notes. State is process-memory only (resets on restart) and
-  // is intentionally low-stakes demo data.
-  const TEAM = ['Siti Nurhaliza', 'Budi Prasetyo', 'Rina Kartika', 'Agus Salim', 'Dewi Anjani'];
+  // ── Presence & sticky notes ─────────────────────────────────────
+  // Who is active is live state (memory, from each operator's own requests);
+  // the team's sticky notes persist in `notesFile` so a restart keeps them.
   const NOTE_COLORS = ['amber', 'sky', 'green', 'pink'] as const;
   type NoteColor = (typeof NOTE_COLORS)[number];
   interface StickyNote { id: string; author: string; text: string; color: NoteColor; createdAt: string; }
   const presence = new Map<string, number>();
-  let noteSeq = 2;
-  const notes: StickyNote[] = [
-    { id: 'n1', author: 'Rina Kartika', text: 'Pasien titipan Bangsal Arafah menunggu konfirmasi kelas — tolong dicek sebelum jam 12.', color: 'amber', createdAt: new Date(Date.now() - 45 * 60_000).toISOString() },
-    { id: 'n2', author: 'Budi Prasetyo', text: 'Koreksi naik kelas hari ini sudah beres semua ✔', color: 'green', createdAt: new Date(Date.now() - 12 * 60_000).toISOString() },
-  ];
+  const notes: StickyNote[] = (() => {
+    if (!options.notesFile || !existsSync(options.notesFile)) return [];
+    try {
+      const saved = JSON.parse(readFileSync(options.notesFile, 'utf8')) as unknown;
+      return Array.isArray(saved) ? (saved as StickyNote[]) : [];
+    } catch {
+      return [];
+    }
+  })();
+  let noteSeq = notes.reduce((max, n) => Math.max(max, Number(n.id.replace(/\D/g, '')) || 0), 0);
+  const saveNotes = () => {
+    if (!options.notesFile) return;
+    mkdirSync(dirname(options.notesFile), { recursive: true });
+    const tmp = `${options.notesFile}.tmp`;
+    writeFileSync(tmp, JSON.stringify(notes, null, 2));
+    renameSync(tmp, options.notesFile);
+  };
   const ONLINE_WINDOW_MS = 90_000;
   const touch = (name: string | undefined) => { if (name) presence.set(name, Date.now()); };
   const presenceList = (self?: string) => {
     const now = Date.now();
-    // Deterministic demo baseline: first three teammates always read as active
-    // so the Overview shows a lively roster; the rest stay offline unless they
-    // actually ping. Real pings (including `self`) override this.
-    for (let i = 0; i < 3; i += 1) { const t = TEAM[i]; if (t) presence.set(t, now - i * 8_000); }
     if (self) presence.set(self, now);
-    const names = new Set<string>([...TEAM, ...presence.keys()]);
-    const operators = [...names].map((name) => {
-      const last = presence.get(name) ?? 0;
-      return { name, online: now - last <= ONLINE_WINDOW_MS, lastSeenMs: last, self: name === self };
-    }).sort((a, b) => Number(b.online) - Number(a.online) || b.lastSeenMs - a.lastSeenMs);
+    const operators = [...presence.entries()].map(([name, last]) => (
+      { name, online: now - last <= ONLINE_WINDOW_MS, lastSeenMs: last, self: name === self }
+    )).sort((a, b) => Number(b.online) - Number(a.online) || b.lastSeenMs - a.lastSeenMs);
     return { operators, onlineCount: operators.filter((o) => o.online).length };
   };
 
@@ -368,6 +351,7 @@ export function buildServer(options: ServerOptions): FastifyInstance {
     noteSeq += 1;
     const note: StickyNote = { id: `n${noteSeq}`, author: op.name, text, color, createdAt: new Date().toISOString() };
     notes.push(note);
+    saveNotes();
     touch(op.name);
     return reply.code(201).send({ note });
   });
@@ -379,6 +363,7 @@ export function buildServer(options: ServerOptions): FastifyInstance {
     if (idx === -1) return reply.code(404).send({ error: 'note_not_found' });
     // Shared team board: any authenticated operator may clear a note.
     notes.splice(idx, 1);
+    saveNotes();
     return reply.code(200).send({ ok: true });
   });
 

@@ -96,7 +96,7 @@ async function main(): Promise<void> {
     naikKelasFile: env('NAIK_KELAS_FILE', './.data/naik-kelas.json'),
     berkasCacheDir,
   };
-  const app = buildServer({ ledger, corsOrigins, sessions, live, uiDir, qaAuth, secureCookies, autoApproveWrites, criticalApprovals, rules, naikKelas, about, berkas });
+  const app = buildServer({ ledger, corsOrigins, sessions, live, uiDir, qaAuth, secureCookies, autoApproveWrites, criticalApprovals, rules, naikKelas, about, berkas, notesFile: env('NOTES_FILE', './.data/notes.json') });
 
   try {
     await app.listen({ port, host });

@@ -22,7 +22,7 @@ export interface BillingSummary {
   /** Jumlah pasien naik kelas hari ini (bayar selisih). */
   naikKelasToday: number;
   gate: { approved: number; rejected: number; pending: number };
-  /** Placeholder numbers (server stub or client fallback), not a real billing query. */
+  /** Client fallback when the orchestrator is unreachable, not a real billing query. */
   demo?: boolean;
 }
 
@@ -51,7 +51,8 @@ export async function fetchBillingSummary(signal?: AbortSignal): Promise<Billing
     const res = await fetch(`${BASE}/api/billing/summary`, { credentials: 'include', signal });
     if (!res.ok) return fallbackBillingSummary();
     const json = (await res.json()) as Partial<BillingSummary>;
-    if (!json.days || json.days.length === 0) return fallbackBillingSummary();
+    // Real but empty data stays empty; only an unreachable endpoint falls back to demo.
+    if (!Array.isArray(json.days)) return fallbackBillingSummary();
     return {
       days: json.days,
       titipanToday: json.titipanToday ?? 0,
