@@ -19,7 +19,9 @@ MOCK_PID=$!
 
 echo "### booting orchestrator (FileLedger at $AUDIT_DIR) ###"
 # Point the per-user login at the mock server. Run data still uses fixtures.
-ORCHESTRATOR_PORT=$PORT AUDIT_LEDGER_DIR="$AUDIT_DIR" \
+# This smoke exercises the manual, two-person mode (gates pause, locks hold),
+# not the auto-approve default.
+ORCHESTRATOR_PORT=$PORT AUDIT_LEDGER_DIR="$AUDIT_DIR" AUTO_APPROVE_WRITES=0 CRITICAL_APPROVALS=2 \
   EVOMEDIS_BASE_URL="http://127.0.0.1:$MOCK_PORT/evoMedis_pkugombong/index.php" \
   node --import tsx apps/orchestrator/src/main.ts > .data/livetest.log 2>&1 &
 PID=$!
