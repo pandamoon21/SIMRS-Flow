@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from 're
 import { ranapWorkflow } from '@simrs-flow/domain-ranap';
 import { rajalWorkflow } from '@simrs-flow/domain-rajal';
 import { mockEventStream } from '@simrs-flow/test-fixtures';
-import { type ExecutionMode, type WorkflowDefinition } from '@simrs-flow/workflow-core';
+import { type ExecutionMode, type WorkflowDefinition, type WorkflowEvent } from '@simrs-flow/workflow-core';
 import type { RunInputResult } from '../features/forms/RunInputForm.js';
 import { useRunStore } from '../store/runStore.js';
 import { api, UnauthorizedError, type RunSummary } from '../api/client.js';
@@ -32,6 +32,9 @@ const WORKFLOWS: Record<string, WorkflowDefinition> = {
 const WORKFLOW_LABELS = Object.fromEntries(Object.values(WORKFLOWS).map((workflow) => [workflow.id, workflow.label]));
 
 export type Source = 'offline' | 'live';
+
+/** Streamed events are applied in batches this far apart (one render per batch). */
+const EVENT_BATCH_MS = 50;
 
 export function liveStartBlockerOf(source: Source, runInput: RunInputResult): string | undefined {
   if (source !== 'live') return undefined;
@@ -100,7 +103,7 @@ export function App() {
 
   const loadReplay = useRunStore((store) => store.loadReplay);
   const loadDefinition = useRunStore((store) => store.loadDefinition);
-  const pushEvent = useRunStore((store) => store.pushEvent);
+  const pushEvents = useRunStore((store) => store.pushEvents);
   const markRunLost = useRunStore((store) => store.markRunLost);
   const seek = useRunStore((store) => store.seek);
   const cancelReplay = useRunStore((store) => store.cancelReplay);
@@ -154,14 +157,27 @@ export function App() {
 
   const streamRun = useCallback((id: string) => {
     unsubRef.current?.();
-    unsubRef.current = api.streamEvents(id, pushEvent, (error) => {
+    // Opening a finished or reconnected run replays its whole history in one
+    // burst; applying events in ~50 ms batches renders once per batch instead
+    // of once per event (thousands of renders froze office PCs for seconds).
+    let queue: WorkflowEvent[] = [];
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const flush = () => { timer = undefined; const batch = queue; queue = []; pushEvents(batch); };
+    const unsubscribe = api.streamEvents(id, (event) => {
+      queue.push(event);
+      timer ??= setTimeout(flush, EVENT_BATCH_MS);
+    }, (error) => {
+      // Keep order: whatever arrived before the error lands first.
+      if (timer !== undefined) { clearTimeout(timer); flush(); }
       if (/unauthorized/i.test(error.message)) return onUnauthorized();
       const lost = runLostMessage(error.message);
       // Otherwise the projection sits in "Berjalan" forever with nothing behind it.
       if (lost) markRunLost(lost);
       setLiveError(lost ?? error.message);
     });
-  }, [onUnauthorized, pushEvent, markRunLost]);
+    // Leaving this run drops its unapplied tail: the next run has already reset the store.
+    unsubRef.current = () => { unsubscribe(); if (timer !== undefined) clearTimeout(timer); queue = []; };
+  }, [onUnauthorized, pushEvents, markRunLost]);
 
   // Auto-advance the replay from `fromIndex` up to `total`, storing the timer so
   // a restart, pause, or cancel can stop it cleanly.

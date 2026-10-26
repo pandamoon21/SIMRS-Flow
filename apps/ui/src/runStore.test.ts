@@ -28,6 +28,23 @@ describe('runStore', () => {
     expect(state!.nodes.execute_verifikasi!.status).toBe('needs_review');
   });
 
+  it('pushEvents applies a batch in one update, identical to one-by-one', () => {
+    const stream = mockEventStream(ranapWorkflow, { runId: 'ui-batch' });
+    useRunStore.getState().loadDefinition(ranapWorkflow, 'preview');
+    for (const event of stream) useRunStore.getState().pushEvent(event);
+    const oneByOne = useRunStore.getState().state;
+
+    useRunStore.getState().loadDefinition(ranapWorkflow, 'preview');
+    let updates = 0;
+    const unsubscribe = useRunStore.subscribe(() => { updates += 1; });
+    useRunStore.getState().pushEvents(stream.slice(0, 10));
+    useRunStore.getState().pushEvents(stream.slice(10));
+    unsubscribe();
+    expect(updates).toBe(2);
+    expect(useRunStore.getState().state).toEqual(oneByOne);
+    expect(useRunStore.getState().cursor).toBe(stream.length);
+  });
+
   it('ends a live run the orchestrator lost, once, and never a finished one', () => {
     const stream = mockEventStream(ranapWorkflow, { runId: 'ui-lost' });
     useRunStore.getState().loadDefinition(ranapWorkflow, 'preview');
