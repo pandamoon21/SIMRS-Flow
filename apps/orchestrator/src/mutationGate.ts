@@ -44,7 +44,7 @@ import {
   type VerificationRule,
   type WorkflowEventType,
 } from '@simrs-flow/workflow-core';
-import {
+import { endpointLabel,
   describeResponse,
   getEndpoint,
   TransportError,
@@ -315,7 +315,7 @@ export async function applyApprovedMutation(
 
   emit({
     type: 'mutation.approved',
-    message: `Mutation ${plan.endpointId} approved by ${approvedBy.join(', ')}`,
+    message: `${endpointLabel(plan.endpointId)} disetujui oleh ${approvedBy.join(', ')}`,
     data: {
       ...identity,
       status: 'approved',
@@ -332,7 +332,7 @@ export async function applyApprovedMutation(
     emit({
       type: 'mutation.invalidated',
       severity: 'error',
-      message: `Mutation ${plan.endpointId} refused — ${reason}`,
+      message: `${endpointLabel(plan.endpointId)} tidak dijalankan — ${reason}`,
       data: { ...identity, status: 'invalidated', phase, reason, preconditionResults },
     });
     return {
@@ -390,7 +390,7 @@ export async function applyApprovedMutation(
     emit({
       type: 'mutation.failed',
       severity: 'error',
-      message: `Mutation ${plan.endpointId} was not applied — ${reason}`,
+      message: `${endpointLabel(plan.endpointId)} tidak diterapkan — ${reason}`,
       data: {
         ...identity,
         status: 'failed',
@@ -417,7 +417,7 @@ export async function applyApprovedMutation(
     emit({
       type: 'mutation.failed',
       severity: 'error',
-      message: `Mutation ${plan.endpointId} rejected by SIMRS — ${acknowledgement.reason}`,
+      message: `${endpointLabel(plan.endpointId)} ditolak SIMRS — ${acknowledgement.reason}`,
       data: {
         ...identity,
         status: 'failed',
@@ -439,7 +439,7 @@ export async function applyApprovedMutation(
 
   emit({
     type: 'mutation.applied',
-    message: `Mutation ${plan.endpointId} applied (${acknowledgement.reason})`,
+    message: `${endpointLabel(plan.endpointId)} diterapkan ke SIMRS (${acknowledgement.reason})`,
     data: { ...identity, status: 'applied', phase: 'write', preconditionResults },
   });
 
@@ -457,7 +457,7 @@ export async function applyApprovedMutation(
     emit({
       type: 'log.appended',
       severity: 'warn',
-      message: `Mutation ${plan.endpointId}: ${reason}`,
+      message: `${endpointLabel(plan.endpointId)}: ${reason}`,
       data: { ...identity, status: 'applied', phase: 'verify', reason },
     });
     return {
@@ -478,7 +478,7 @@ export async function applyApprovedMutation(
       severity: 'error',
       // Loud on purpose: the write was accepted but the state does not read
       // back as expected, so it may have half-landed.
-      message: `Mutation ${plan.endpointId} applied but NOT verified — ${reason}`,
+      message: `${endpointLabel(plan.endpointId)} sudah ditulis tetapi BELUM terverifikasi — cek manual di SIMRS: ${reason}`,
       data: {
         ...identity,
         status: 'failed',
@@ -503,7 +503,7 @@ export async function applyApprovedMutation(
 
   emit({
     type: 'mutation.verified',
-    message: `Mutation ${plan.endpointId} verified (${rules.length} read-after-write check(s))`,
+    message: `${endpointLabel(plan.endpointId)} terverifikasi (${rules.length} cek ulang)`,
     data: { ...identity, status: 'verified', phase: 'verify', preconditionResults, verificationResults },
   });
   return {

@@ -57,7 +57,7 @@ const NAV_ITEMS: ReadonlyArray<{ page: DashboardPage; label: string; icon: IconN
   { page: 'history', label: 'History', icon: 'history', hint: 'Riwayat run sebelumnya' },
   { page: 'review', label: 'Review', icon: 'review', hint: 'Tinjau gate & keputusan' },
   { page: 'rules', label: 'Rules', icon: 'rules', hint: 'Katalog rule, alasan & tindakan' },
-  { page: 'settings', label: 'Settings & health', icon: 'settings', hint: 'Pengaturan & status host' },
+  { page: 'settings', label: 'Pengaturan & kesehatan', icon: 'settings', hint: 'Pengaturan & status host' },
 ];
 
 /** Icon-rail glyphs, matching the Claude Design Run/Dashboard artboards. */

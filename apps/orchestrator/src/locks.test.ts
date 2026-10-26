@@ -75,3 +75,13 @@ describe('TransactionLocks', () => {
     expect(locks.acquire('ranap', ['ranap-rm:111:2026-06-10'])).toBeUndefined();
   });
 });
+
+describe('lockKeyLabel', () => {
+  it('names a lock the way an operator would', async () => {
+    const { lockKeyLabel } = await import('./locks.js');
+    expect(lockKeyLabel('tx:03-1')).toBe('transaksi 03-1');
+    expect(lockKeyLabel('ranap-rm:0-12-34-56:2026-06-10')).toBe('No RM 0-12-34-56 (2026-06-10)');
+    expect(lockKeyLabel('ranap-rm:0-12-34-56:*')).toBe('No RM 0-12-34-56');
+    expect(lockKeyLabel('rajal-discovery:*')).toBe('pengambilan laporan rajal');
+  });
+});

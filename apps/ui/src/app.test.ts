@@ -134,10 +134,10 @@ describe('App live start guard', () => {
 describe('Lost run stream', () => {
   it('ends a run the orchestrator no longer knows, and leaves blips alone', () => {
     expect(runLostMessage('run_not_found')).toMatch(/orchestrator restart/);
-    expect(runLostMessage('SSE connection failed after several attempts — check the orchestrator')).toMatch(/putus/);
+    expect(runLostMessage('Koneksi ke orchestrator gagal setelah beberapa percobaan — cek orchestrator')).toMatch(/putus/);
     expect(runLostMessage('run has no terminal event')).toMatch(/Run terputus/);
     expect(runLostMessage('ledger ended with a partial line')).toMatch(/Run terputus/);
-    expect(runLostMessage('SSE connection lost — reconnecting…')).toBeUndefined();
+    expect(runLostMessage('Koneksi ke orchestrator terputus — menyambung ulang…')).toBeUndefined();
   });
 });
 
@@ -148,7 +148,16 @@ describe('Operator feedback on irreversible actions', () => {
   });
 
   it('makes the cancel button ask before it fires', () => {
-    expect(cancelButtonLabel(false)).toBe('Stop run');
-    expect(cancelButtonLabel(true)).toBe('Klik lagi untuk stop');
+    expect(cancelButtonLabel(false)).toBe('Hentikan');
+    expect(cancelButtonLabel(true)).toBe('Klik lagi untuk menghentikan');
+  });
+});
+
+describe('Next action when a run stops', () => {
+  it('tells the operator what to do, with a generic fallback', async () => {
+    const { nextActionOf } = await import('./features/run/runStatus.js');
+    expect(nextActionOf('validate_sep')).toMatch(/menu Pendaftaran/);
+    expect(nextActionOf('reject_paid')).toMatch(/riwayat pembayaran/);
+    expect(nextActionOf('some_new_step')).toMatch(/Inspector/);
   });
 });

@@ -83,15 +83,20 @@ export function RunLogView({ onApproveGate, onRejectGate, onApproveMutation, onO
 
   // A search looks through every line, so Ringkas steps aside while one is typed.
   const quietNow = quiet && !query.trim();
-  const allRows = useMemo(() => (definition ? terminalRows(definition, state, { checks, summary: quietNow }) : []), [definition, state, checks, quietNow]);
-  const rows = useMemo(() => allRows.filter((row) => (row.kind === 'line'
-    ? row.entry.seq > clearedThrough && (debugMode || row.entry.severity !== 'debug') && (!(problemsOnly || quietNow) || PROBLEM.has(row.entry.severity))
-    : row.kind !== 'check' || !problemsOnly || row.item.ok === false)), [allRows, clearedThrough, debugMode, problemsOnly, quietNow]);
-  const blocks = useMemo(() => stepBlocks(rows).filter((block) => !problemsOnly || !block.head || block.rows.length > 0 || PROBLEM_STATUS.has(block.end?.status ?? '')), [rows, problemsOnly]);
   const patients = useMemo(() => (definition ? patientTrails(definition, state) : []), [definition, state]);
   // A batch opens per patient; the operator's own pick then sticks.
   const [viewPick, setViewPick] = useState<'patients' | 'steps'>();
   const view = viewPick ?? (patients.length > 1 ? 'patients' : 'steps');
+  // The step view's rows are only built when shown, or when a decision card needs them:
+  // on a 500-patient batch they cost hundreds of ms on a slow PC for a hidden view.
+  const decisionOpen = Boolean(state && (Object.values(state.nodes).some((node) => node.status === 'gate_waiting')
+    || Object.values(state.mutations).some((mutation) => mutation.status === 'planned')));
+  const needRows = view === 'steps' || decisionOpen;
+  const allRows = useMemo(() => (definition && needRows ? terminalRows(definition, state, { checks, summary: quietNow }) : []), [definition, state, checks, quietNow, needRows]);
+  const rows = useMemo(() => allRows.filter((row) => (row.kind === 'line'
+    ? row.entry.seq > clearedThrough && (debugMode || row.entry.severity !== 'debug') && (!(problemsOnly || quietNow) || PROBLEM.has(row.entry.severity))
+    : row.kind !== 'check' || !problemsOnly || row.item.ok === false)), [allRows, clearedThrough, debugMode, problemsOnly, quietNow]);
+  const blocks = useMemo(() => stepBlocks(rows).filter((block) => !problemsOnly || !block.head || block.rows.length > 0 || PROBLEM_STATUS.has(block.end?.status ?? '')), [rows, problemsOnly]);
   const [unfolded, setUnfolded] = useState<ReadonlySet<string>>(new Set());
   const waiting = openDecisions(rows);
   // End rows are drawn inside their block's header, so they are not search targets of their own.

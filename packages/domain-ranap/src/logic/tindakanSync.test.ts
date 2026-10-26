@@ -1133,3 +1133,14 @@ describe('rekapitulasi HTML parsers', () => {
     expect(getMalformedRekapRoomChargeDates('')).toEqual([]);
   });
 });
+
+describe('pelaksanaHarga', () => {
+  it('sends the line total: SIMRS divides tampung_pelaksana harga by qty (live 2026-10-27)', async () => {
+    const { pelaksanaHarga } = await import('./tindakanSync.js');
+    expect(pelaksanaHarga({ harga: '7500', qty: '2', jumlah: 15000 })).toBe('15000');
+    expect(pelaksanaHarga({ harga: '15000', qty: '2' })).toBe('30000');
+    expect(pelaksanaHarga({ harga: '15000', qty: '1', jumlah: 15000 })).toBe('15000');
+    expect(pelaksanaHarga({ harga: '70000' })).toBe('70000');
+    expect(pelaksanaHarga({ harga: '' })).toBe('');
+  });
+});

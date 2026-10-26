@@ -59,7 +59,7 @@ const GROUPS = [
 /** Canvas columns, left→right, following the legacy ranap_v4 flow diagram. */
 const PHASES = [
   { id: 'persiapan', label: 'Persiapan', description: 'No. RM dan riwayat kunjungan dari menu kasir' },
-  { id: 'kelayakan', label: 'Bisa Dipayment?', description: 'Tolak registrasi yang sudah diverifikasi atau dibayar' },
+  { id: 'kelayakan', label: 'Siap Dibayar?', description: 'Tolak registrasi yang sudah diverifikasi atau dibayar' },
   { id: 'sep', label: 'SEP', description: 'SEP pendaftaran dibandingkan dengan SEP kasir' },
   { id: 'kamar', label: 'Kamar & Tgl Masuk', description: 'Riwayat kamar, tanggal masuk, tindakan, titipan' },
   { id: 'cara_masuk', label: 'Gizi & Cara Masuk', description: 'Order gizi dan asal masuk IGD / POLI' },
@@ -84,14 +84,14 @@ type NodeSpec = [
 ];
 
 const NODE_SPECS: NodeSpec[] = [
-  ['normalize_input', 'Normalisasi Input', 'preflight', 'input', false, 'persiapan', 'Menormalkan No. RM, tanggal, dan opsi run'],
+  ['normalize_input', 'Periksa Input', 'preflight', 'input', false, 'persiapan', 'Menormalkan No. RM, tanggal, dan opsi run'],
   ['load_visits', 'Ambil Kunjungan', 'preflight', 'read', true, 'persiapan', 'Membaca riwayat kunjungan rawat inap dari menu kasir'],
-  ['reject_verified', 'Tolak Sudah Verifikasi', 'preflight', 'validate', true, 'kelayakan', 'Melewati registrasi yang sudah diverifikasi'],
-  ['reject_paid', 'Tolak Sudah Bayar', 'preflight', 'validate', true, 'kelayakan', 'Melewati registrasi yang sudah dibayar'],
-  ['validate_sep', 'Validasi SEP', 'sep', 'validate', true, 'sep', 'Mencari SEP RITL dari menu pendaftaran'],
+  ['reject_verified', 'Cek Sudah Diverifikasi', 'preflight', 'validate', true, 'kelayakan', 'Melewati registrasi yang sudah diverifikasi'],
+  ['reject_paid', 'Cek Sudah Dibayar', 'preflight', 'validate', true, 'kelayakan', 'Melewati registrasi yang sudah dibayar'],
+  ['validate_sep', 'Cek SEP', 'sep', 'validate', true, 'sep', 'Mencari SEP RITL dari menu pendaftaran'],
   ['load_kasir', 'Ambil Data Kasir', 'sep', 'read', true, 'sep', 'Membaca SEP dan identitas tagihan di menu kasir'],
   ['compare_sep', 'Bandingkan & Koreksi SEP', 'sep', 'mutate', false, 'sep', 'Membandingkan SEP pendaftaran dengan kasir; rencana update SEP bila beda', 'high'],
-  ['detect_byny', 'Deteksi BYNY', 'sep', 'validate', false, 'sep', 'Mendeteksi kasus BYNY dan SEP yang dipakai'],
+  ['detect_byny', 'Cek Bayi Baru Lahir (BYNY)', 'sep', 'validate', false, 'sep', 'Mendeteksi kasus BYNY dan SEP yang dipakai'],
   ['collect_elektromedik', 'Kumpulkan Elektromedik', 'penunjang', 'read', false, 'kamar', 'Mengumpulkan tagihan elektromedik per registrasi'],
   ['build_rooms', 'Susun Kamar', 'ruangan', 'plan', true, 'kamar', 'Menyusun riwayat kamar dan hari rawat'],
   ['sync_tgl_masuk', 'Sinkronisasi Tanggal Masuk', 'ruangan', 'mutate', false, 'kamar', 'Menyamakan tanggal masuk awal dengan tanggal SEP', 'high'],
@@ -100,7 +100,7 @@ const NODE_SPECS: NodeSpec[] = [
   ['preflight_gizi', 'Cek Awal Order Gizi', 'gizi', 'mutate', false, 'cara_masuk', 'Mengirim order gizi yang masih tertunda', 'high'],
   ['detect_origin', 'Deteksi Cara Masuk', 'asal_masuk', 'validate', true, 'cara_masuk', 'Menentukan asal masuk IGD atau POLI per registrasi'],
   ['process_igd', 'Proses IGD', 'asal_masuk', 'plan', false, 'cara_masuk', 'Menyelaraskan dan mentransfer tagihan IGD asal'],
-  ['process_poli', 'Proses POLI', 'asal_masuk', 'plan', false, 'cara_masuk', 'Menyelaraskan dan mentransfer tagihan POLI asal'],
+  ['process_poli', 'Proses Poliklinik', 'asal_masuk', 'plan', false, 'cara_masuk', 'Menyelaraskan dan mentransfer tagihan POLI asal'],
   ['transfer_elektromedik', 'Transfer Elektromedik', 'penunjang', 'mutate', false, 'blocker', 'Mentransfer tagihan elektromedik ke tagihan ranap', 'high'],
   ['scan_hanging_trx', 'Cek Transaksi Menggantung', 'blocker', 'validate', false, 'blocker', 'Mencari transaksi menggantung di sekitar masa rawat'],
   // Not critical: `main()` collects the blockers (ranap_v3.py:16544-16592), then
@@ -123,9 +123,9 @@ const NODE_SPECS: NodeSpec[] = [
   ['check_berkas', 'Kelengkapan Berkas', 'verifikasi', 'validate', false, 'pra_verifikasi', 'Mencari dokumen wajib klaim di berkas e-klaim (OCR untuk foto)'],
   ['preverify_summary', 'Ringkasan Pra-Verifikasi', 'verifikasi', 'validate', true, 'pra_verifikasi', 'Merangkum blocker sebelum verifikasi'],
   ['recover_gizi', 'Pulihkan Blocker Gizi', 'gizi', 'mutate', false, 'pra_verifikasi', 'Membersihkan order gizi yang menahan verifikasi', 'high'],
-  ['check_balance', 'Cek Balance', 'verifikasi', 'validate', true, 'pra_verifikasi', 'Memeriksa balance tagihan sebelum verifikasi'],
+  ['check_balance', 'Cek Keseimbangan Tagihan', 'verifikasi', 'validate', true, 'pra_verifikasi', 'Memeriksa balance tagihan sebelum verifikasi'],
   ['final_gate', 'Gerbang Akhir', 'verifikasi', 'gate', true, 'verifikasi', 'Persetujuan operator sebelum verifikasi', 'critical'],
-  ['execute_verifikasi', 'Eksekusi Verifikasi', 'verifikasi', 'mutate', true, 'verifikasi', 'Merencanakan verifikasi per registrasi', 'critical'],
+  ['execute_verifikasi', 'Jalankan Verifikasi', 'verifikasi', 'mutate', true, 'verifikasi', 'Merencanakan verifikasi per registrasi', 'critical'],
   ['tampung_bayar', 'Tampung Bayar', 'verifikasi', 'mutate', true, 'verifikasi', 'Merencanakan tampung bayar setelah verifikasi', 'critical'],
   ['emit_summary', 'Ringkasan', 'verifikasi', 'summary', false, 'verifikasi', 'Ringkasan hasil verifikasi (TSV)'],
 ];
@@ -169,7 +169,10 @@ const EDGE_SPECS: EdgeSpec[] = [
   ['evaluate_titipan', 'check_berkas', 'sequential'],
   ['final_gate', 'execute_verifikasi', 'guard', undefined, 'disetujui'],
   ['execute_verifikasi', 'tampung_bayar', 'guard', undefined, 'terverifikasi'],
-  ['tampung_bayar', 'emit_summary', 'sequential'],
+  // Optional joins: the summary row is wanted even when Setup switches
+  // Verifikasi / Tampung Bayar off (a cleanup-only run), so neither edge is required.
+  ['tampung_bayar', 'emit_summary', 'parallel'],
+  ['check_balance', 'emit_summary', 'parallel'],
 ];
 
 export const ranapWorkflow: WorkflowDefinition = {

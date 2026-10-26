@@ -6,7 +6,7 @@ import { useState, type CSSProperties, type ReactNode, type Ref } from 'react';
 import type { RunState } from '@simrs-flow/workflow-core';
 import { api } from '../../api/client.js';
 import { Button } from '../../ui/primitives.js';
-import { durationLabel, outcomeDetail, patientOutcomesOf, PREVIEW_GATE_LABEL, previewGateStopOf, RUN_STATUS_LABEL, runOutcomeOf } from './runStatus.js';
+import { durationLabel, nextActionOf, outcomeDetail, patientOutcomesOf, PREVIEW_GATE_LABEL, previewGateStopOf, RUN_STATUS_LABEL, runOutcomeOf } from './runStatus.js';
 
 export interface RunSummaryProps {
   state: RunState;
@@ -73,7 +73,7 @@ export function RunSummary({ state, runId, labelOf, onFocusNode, onOpenHistory, 
       {held ? (
         <p className="run-summary-stop">Sampai di <strong>{labelOf(held)}</strong> — gerbang ditahan karena preview; tidak ada yang ditulis.</p>
       ) : outcome.stopNodeId ? (
-        <p className="run-summary-stop">Berhenti di <strong>{labelOf(outcome.stopNodeId)}</strong></p>
+        <p className="run-summary-stop">Berhenti di <strong>{labelOf(outcome.stopNodeId)}</strong>. {nextActionOf(outcome.stopNodeId)}</p>
       ) : null}
       <div className="run-summary-actions">
         {held ? (

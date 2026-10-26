@@ -38,7 +38,7 @@ const RISK_TONE: Record<RiskBand, Tone> = { low: 'success', medium: 'warning', h
 const DECISION_LABEL: Record<GateDecision, string> = {
   'auto-approve': 'Auto-approved',
   'auto-reject': 'Auto-rejected',
-  manual: 'Needs you',
+  manual: 'Menunggu Anda',
 };
 const DECISION_TONE: Record<GateDecision, Tone> = { 'auto-approve': 'success', 'auto-reject': 'danger', manual: 'warning' };
 
@@ -93,7 +93,7 @@ function buildQueue(state: RunState | undefined, settings: ReviewSettings): Queu
       nodeId,
       label: node?.summary ?? nodeId,
       endpointId: mutation?.endpointId ?? '—',
-      reason: mutation?.reason ?? 'Gate awaiting operator decision.',
+      reason: mutation?.reason ?? 'Gate menunggu persetujuan.',
       nominal,
       facts,
       risk: riskOf(facts, settings),
@@ -227,15 +227,15 @@ export function ReviewQueue({ state, runId, hasReviewContext, onApproveGate, onR
                     {item.nominal !== undefined ? <><dt>Nominal</dt><dd className="mono tone-info">{formatRupiah(item.nominal)}</dd></> : null}
                     <dt>Precheck</dt>
                     <dd className={item.facts.preconditionsOk === false ? 'tone-danger' : item.facts.preconditionsOk ? 'tone-success' : ''}>
-                      {item.facts.preconditionsOk === false ? 'Precondition failed' : item.facts.preconditionsOk ? 'Preconditions re-checked · OK' : 'Preconditions not yet checked'}
+                      {item.facts.preconditionsOk === false ? 'Syarat tidak terpenuhi' : item.facts.preconditionsOk ? 'Preconditions re-checked · OK' : 'Syarat belum dicek'}
                     </dd>
                   </dl>
                   <div className="review-card-actions">
                     {isManual ? (
                       <>
-                        <Button color="secondary" variant="outline" size="sm" onClick={onOpenRun}>Inspect on canvas</Button>
-                        <Button color="danger" variant="outline" size="sm" onClick={() => onRejectGate(item.nodeId)}>Reject</Button>
-                        <Button color="info" size="sm" onClick={() => onApproveGate(item.nodeId)}>Approve</Button>
+                        <Button color="secondary" variant="outline" size="sm" onClick={onOpenRun}>Lihat di kanvas</Button>
+                        <Button color="danger" variant="outline" size="sm" onClick={() => onRejectGate(item.nodeId)}>Tolak</Button>
+                        <Button color="info" size="sm" onClick={() => onApproveGate(item.nodeId)}>Setujui</Button>
                       </>
                     ) : (
                       <>

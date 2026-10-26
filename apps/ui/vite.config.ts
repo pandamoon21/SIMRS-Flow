@@ -41,6 +41,14 @@ export default defineConfig({
       '@simrs-flow/domain-rajal': pkg('domain-rajal'),
     },
   },
+  build: {
+    rollupOptions: {
+      // Our workspace packages are pure modules reached through barrel index
+      // files; without this a top-level `new Map(...)` kept the whole rajal
+      // executor (server-only logic) in the browser bundle.
+      treeshake: { moduleSideEffects: (id) => !/[\\/]packages[\\/][^\\/]+[\\/]src[\\/].+\.ts$/.test(id) },
+    },
+  },
   server: {
     port: 5173,
     strictPort: true,

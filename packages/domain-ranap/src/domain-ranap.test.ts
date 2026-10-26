@@ -1204,6 +1204,15 @@ describe('ranap mutation plan metadata', () => {
     expect(plan.payload?.Kd_ParaMedis).toBe('PERAWAT RUANG ARAFAH KELAS 3');
   });
 
+  it('posts the line total as tampung_pelaksana harga on a qty > 1 row', async () => {
+    // Live 2026-10-27: SIMRS divides this harga by qty, so sending the unit
+    // price of a qty-2 line halved it and left the bill Rp 15 000 short. The
+    // fixture's JASA PELAYANAN (urut 3) is 125 000 x 2.
+    const { result } = await runPreview();
+    const plan = plansOf(result).find((item) => item.endpointId === 'poliklinik.tampungPelaksana' && String(item.payload?.urut_tindakan) === '3')!;
+    expect(plan.payload?.harga).toBe('250000');
+  });
+
   it('returns no pelaksana rather than inventing the room label', async () => {
     // The Python's `if not kandidat: return ""` (ranap_v3.py:1977). Falling back
     // to the normalised room name put a value in the payload that names no real

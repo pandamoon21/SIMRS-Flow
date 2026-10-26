@@ -93,7 +93,7 @@ export function GateOutcomePanel({ summary }: { summary: BillingSummary }) {
   return (
     <Card className="surface-card">
       <CardHeader className="card-header-actions">
-        <span>Gate outcomes</span>
+        <span>Hasil gate</span>
         <div className="billing-chart-total gate-rate">
           <strong className="tone-success">{approvalRate}%</strong>
           <span>approval rate</span>

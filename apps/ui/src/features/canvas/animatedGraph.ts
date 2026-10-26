@@ -19,6 +19,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Edge, Node } from 'reactflow';
+import { reducedMotion } from '../../ui/motion.js';
 
 export const GLIDE_MS = 340;
 
@@ -46,7 +47,6 @@ export function movedBetween(a: Node, b: Node): boolean {
 }
 
 const withClass = <T extends { className?: string }>(item: T, name: string): T => ({ ...item, className: `${item.className ?? ''} ${name}` });
-const reducedMotion = () => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /**
  * Reuse the previous object for every element whose content is unchanged

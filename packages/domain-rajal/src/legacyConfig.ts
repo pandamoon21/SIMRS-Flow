@@ -79,7 +79,7 @@ export const RAJAL_DEFAULT_SKIP_TREATMENTS = ['ODC'] as const;
 
 export const RAJAL_LEGACY_CHECKS = [
   { id: 'rencanaOnko', label: 'Rencana onko/kemo' },
-  { id: 'sepCheckRequired', label: 'Validasi SEP' },
+  { id: 'sepCheckRequired', label: 'Cek SEP' },
   { id: 'verificationRequired', label: 'Verifikasi sebelum bayar' },
   { id: 'checkLab', label: 'Lab reguler' },
   { id: 'checkLabPA', label: 'Lab PA' },

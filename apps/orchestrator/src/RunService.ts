@@ -42,14 +42,14 @@ import {
   type WorkflowEvent,
   type WorkflowNodeDefinition,
 } from '@simrs-flow/workflow-core';
-import { FetchTransport, type EvoMedisClient } from '@simrs-flow/evomedis-client';
+import { endpointLabel, FetchTransport, type EvoMedisClient } from '@simrs-flow/evomedis-client';
 import type {
   HistoricalRunStatus,
   Ledger,
   LedgerHistory,
 } from '@simrs-flow/audit-ledger';
 import { getWorkflow, type ExecutorFactoryArgs, type WorkflowEntry } from './registry.js';
-import { deriveLockKeys, TransactionLocks } from './locks.js';
+import { deriveLockKeys, lockKeyLabel, TransactionLocks } from './locks.js';
 import { applyApprovedMutation, type MutationApplyResult } from './mutationGate.js';
 import { ReloginTransport } from './reloginTransport.js';
 import { QaTransport, qaFixtures, qaFixtureTransport, type QaRunOptions } from './qaTransport.js';
@@ -322,6 +322,9 @@ const RETAINED_FINISHED_RUNS = 50;
  */
 const AUTO_APPROVER_ID = 'auto-approve';
 
+/** Indonesian names of a settled plan's status, for operator messages. */
+const PLAN_STATUS_ID: Record<string, string> = { applied: 'diterapkan', verified: 'terverifikasi', failed: 'gagal', invalidated: 'dibatalkan' };
+
 export class RunService {
   private runs = new Map<string, RunHandle>();
   /** Finish order of terminal runs still held in memory (oldest first). */
@@ -408,7 +411,7 @@ export class RunService {
     if (lockKeys.length > 0) {
       const conflict = this.locks.acquire(runId, lockKeys);
       if (conflict) {
-        throw httpError(409, `Transaction "${conflict}" is locked by another in-flight run`);
+        throw httpError(409, `${lockKeyLabel(conflict)} sedang dikerjakan run lain — tunggu run itu selesai atau hentikan dulu`);
       }
     }
 
@@ -454,7 +457,7 @@ export class RunService {
     } catch (err) {
       this.runs.delete(runId);
       this.locks.release(runId);
-      throw httpError(503, `Audit ledger unavailable: ${err instanceof Error ? err.message : String(err)}`);
+      throw httpError(503, `Jejak audit tidak bisa ditulis (cek folder AUDIT_LEDGER_DIR / disk penuh): ${err instanceof Error ? err.message : String(err)}`);
     }
 
     // Fan out + persist every event.
@@ -530,7 +533,7 @@ export class RunService {
     const gateResolver: GateResolver = (node) => {
       // In preview, gates auto-hold (never approve a real write).
       if (mode === 'preview') {
-        return { approved: false, reason: 'Preview mode — gate held' };
+        return { approved: false, reason: 'Preview — gate ditahan, tidak ada yang ditulis' };
       }
       const def = nodeRisk.get(node.id) ?? node;
       // Auto-approve: resolve at once. A `critical` gate needs two distinct
@@ -915,11 +918,11 @@ export class RunService {
       return {
         ok: false,
         error: 'already_settled',
-        message: `Mutation "${planId}" is already ${settled}`,
+        message: `Rencana ini sudah selesai (${PLAN_STATUS_ID[settled]})`,
       };
     }
     if (handle.applying.has(planId)) {
-      return { ok: false, error: 'apply_in_flight', message: `Mutation "${planId}" is already being applied` };
+      return { ok: false, error: 'apply_in_flight', message: 'Rencana ini sedang diterapkan' };
     }
     if (!handle.client) {
       return { ok: false, error: 'client_unavailable', message: 'No client available for this run' };
@@ -938,7 +941,7 @@ export class RunService {
         type: 'log.appended',
         source: 'api',
         nodeId: found.nodeId,
-        message: `Mutation approval ${approvals.size}/${required} by ${operator} for ${found.plan.endpointId} — second approver required`,
+        message: `Persetujuan ${approvals.size}/${required} oleh ${operator} untuk ${endpointLabel(found.plan.endpointId)} — butuh operator kedua`,
         data: { planId, endpointId: found.plan.endpointId },
       });
       return {

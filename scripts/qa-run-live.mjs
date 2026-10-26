@@ -141,7 +141,7 @@ if (args.pages) {
 await evaluate(`(() => { const a = [...document.querySelectorAll('.icon-rail .rail-link')].find((x) => x.querySelector('.visually-hidden')?.textContent.trim() === 'Run'); if (!a) throw new Error('Run nav not found'); a.click(); return 'ok'; })()`);
 await sleep(1200);
 await clickButton(domain === 'rajal' ? '^Rawat Jalan' : '^Rawat Inap');
-await clickButton(offline ? '^Fixture replay$' : '^Live SIMRS$');
+await clickButton(offline ? '^Data contoh$' : '^Live SIMRS$');
 await clickButton('^Preview$');
 if (!offline) {
   if (domain === 'ranap') {
@@ -157,16 +157,16 @@ if (!offline) {
 }
 const blocker = await evaluate(`[...document.querySelectorAll('.form-hint')].map((x) => x.textContent).find((t) => t.startsWith('Start blocked')) ?? ''`);
 if (blocker) { console.error(`FAIL: ${mask(blocker)}`); process.exit(1); }
-await clickButton('^Start preview$');
+await clickButton('^Mulai preview$');
 
 // ── Wait for terminal status ──
 let status = '';
 for (let s = 0; s < TIMEOUT_S; s++) {
   status = await evaluate(`document.querySelector('.run-status-badge')?.textContent.trim() ?? ''`);
-  if (['Selesai', 'Gagal', 'Dibatalkan'].includes(status)) break;
+  if (['Selesai', 'Preview selesai', 'Gagal', 'Dibatalkan'].includes(status)) break;
   await sleep(1000);
 }
-if (!['Selesai', 'Gagal', 'Dibatalkan'].includes(status)) { console.error(`FAIL: run did not finish in ${TIMEOUT_S}s (status=${status})`); process.exit(1); }
+if (!['Selesai', 'Preview selesai', 'Gagal', 'Dibatalkan'].includes(status)) { console.error(`FAIL: run did not finish in ${TIMEOUT_S}s (status=${status})`); process.exit(1); }
 console.log(`run status: ${status}`);
 
 // ── Fit, capture ──

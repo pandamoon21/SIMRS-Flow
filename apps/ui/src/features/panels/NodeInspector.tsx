@@ -195,8 +195,8 @@ function SummaryTsvTable({ data }: { data: SummaryTsv }) {
           </tbody>
         </table>
       </div>
-      <Button color="secondary" variant="outline" size="sm" onClick={copy} title="Copy as tab-separated values">
-        {copied ? 'Copied' : 'Copy TSV'}
+      <Button color="secondary" variant="outline" size="sm" onClick={copy} title="Salin sebagai TSV untuk Excel">
+        {copied ? 'Copied' : 'Salin TSV'}
       </Button>
     </>
   );
@@ -325,14 +325,14 @@ export function NodeInspector({ onApproveGate, onRejectGate, onApproveMutation, 
 
             {gate?.status === 'waiting' ? (
               <Alert color="warning">
-                <strong>Gate awaiting approval</strong>
-                <p className="mb-2 mt-1">Confirm the exact plan and preconditions before deciding.</p>
+                <strong>Gate menunggu persetujuan</strong>
+                <p className="mb-2 mt-1">Periksa rencana dan syaratnya sebelum memutuskan.</p>
                 <div className="button-row">
-                  <Button color="warning" disabled={Boolean(pending)} title="Record your approval — critical gates may need a second operator depending on host config" onClick={() => decide(`approve:${selectedNodeId}`, onApproveGate, selectedNodeId)}>
-                    {pending === `approve:${selectedNodeId}` ? 'Menyetujui…' : 'Approve'}
+                  <Button color="warning" disabled={Boolean(pending)} title="Catat persetujuan Anda — gate kritis bisa butuh operator kedua (sesuai pengaturan host)" onClick={() => decide(`approve:${selectedNodeId}`, onApproveGate, selectedNodeId)}>
+                    {pending === `approve:${selectedNodeId}` ? 'Menyetujui…' : 'Setujui'}
                   </Button>
-                  <Button color="danger" variant="outline" disabled={Boolean(pending)} title="Reject this gate and stop the run here" onClick={() => decide(`reject:${selectedNodeId}`, onRejectGate, selectedNodeId)}>
-                    {pending === `reject:${selectedNodeId}` ? 'Menolak…' : 'Reject'}
+                  <Button color="danger" variant="outline" disabled={Boolean(pending)} title="Tolak gate ini dan hentikan run di sini" onClick={() => decide(`reject:${selectedNodeId}`, onRejectGate, selectedNodeId)}>
+                    {pending === `reject:${selectedNodeId}` ? 'Menolak…' : 'Tolak'}
                   </Button>
                 </div>
               </Alert>
@@ -343,7 +343,7 @@ export function NodeInspector({ onApproveGate, onRejectGate, onApproveMutation, 
 
             {runtimeNode?.proposedMutations.length ? (
               <section className="panel-section">
-                <h2>Proposed mutations</h2>
+                <h2>Rencana perubahan</h2>
                 {runtimeNode.proposedMutations.map((mutation) => {
                   const outcome = state?.mutations[mutation.id];
                   const rules = verificationRulesOf(mutation);
@@ -410,7 +410,7 @@ export function NodeInspector({ onApproveGate, onRejectGate, onApproveMutation, 
                             disabled={Boolean(pending)}
                             onClick={() => decide(`mutation:${mutation.id}`, onApproveMutation, mutation.id)}
                           >
-                            {pending === `mutation:${mutation.id}` ? 'Menyetujui…' : mutation.riskLevel === 'critical' ? 'Approve critical' : 'Approve & apply'}
+                            {pending === `mutation:${mutation.id}` ? 'Menyetujui…' : mutation.riskLevel === 'critical' ? 'Setujui (kritis)' : 'Approve & apply'}
                           </Button>
                         </div>
                       ) : null}
@@ -438,7 +438,7 @@ export function NodeInspector({ onApproveGate, onRejectGate, onApproveMutation, 
 
             {runtimeNode?.logs.length ? (
               <section className="panel-section">
-                <h2>Node logs</h2>
+                <h2>Log node</h2>
                 <div className="log-box node-log-box">
                   {runtimeNode.logs.map((log) => (
                     <div
