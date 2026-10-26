@@ -62,7 +62,7 @@ Concrete data flow for one preview run:
 
 ## Development Commands
 
-Requires **Node >= 20 and npm >= 9**. Dev and test consume package TypeScript source via aliases, so **no build is needed** for daily work (only deployment builds the UI).
+Requires **Node >= 22 and npm >= 9**. Dev and test consume package TypeScript source via aliases, so **no build is needed** for daily work (only deployment builds the UI).
 
 ```bash
 npm install                     # root; installs all workspaces
@@ -139,7 +139,7 @@ node --import tsx scripts/pilot-live-write.ts                              # gua
 - `vitest.config.ts` — the only test config (root; aliases + coverage).
 - `.eslintrc.cjs` — ESLint (classic config; `no-explicit-any` and `no-console` are off, `no-unused-vars` warns with `^_` ignores).
 - `.env.example` — every supported env var (`ORCHESTRATOR_PORT`, `ORCHESTRATOR_HOST`, `ORCHESTRATOR_CORS_ORIGINS`, `EVOMEDIS_BASE_URL(_V2)`, `EVOMEDIS_SESSION_COOKIE_NAME`, `EVOMEDIS_TIMEOUT_MS`, `EXECUTION_MODE`, `AUDIT_LEDGER_DIR`, `DEBUG_HTTP`, `VITE_ORCHESTRATOR_URL`, `UI_DIR`, `PILOT_*`, `QA_*`). `EVOMEDIS_SESSION_COOKIE` and `QA_AUTH_TOKEN` are secrets.
-- `.github/workflows/ci.yml` — the only CI: Node 20, `npm ci → typecheck → lint → test → build`.
+- `.github/workflows/ci.yml` — the only CI: Node 22, `npm ci → typecheck → lint → test → build`.
 - `run.bat` — Windows launcher/menu.
 - `apps/orchestrator/src/{main,server,RunService,mutationGate,registry}.ts` — API entry, routes, orchestration core, the only write path, workflow registry.
 - `packages/workflow-core/src/types.ts` — the authoritative contract (definitions, plans, preconditions, verification rules, `WorkflowEvent` schema `simrs.workflow.event.v1`).
@@ -155,7 +155,7 @@ node --import tsx scripts/pilot-live-write.ts                              # gua
 
 ## Runtime/Tooling Preferences
 
-- **Node.js >= 20, npm >= 9, npm workspaces.** No Bun, pnpm, or yarn — the lockfile is `package-lock.json` (v3) and there is no `packageManager` field.
+- **Node.js >= 22, npm >= 9, npm workspaces.** No Bun, pnpm, or yarn — the lockfile is `package-lock.json` (v3) and there is no `packageManager` field.
 - **No Docker** (no Dockerfile/compose). **No bundler except Vite**, and Vite is used for the UI and dev server only; the orchestrator runs unbundled through `tsx` (`node --import tsx src/main.ts`).
 - **No codegen, no migrations, no seeding** — the only persistence is the append-only JSONL ledger. PostgreSQL is explicitly deferred.
 - TypeScript is strict: `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride`, `noFallthroughCasesInSwitch`, `verbatimModuleSyntax`, `isolatedModules`; `moduleResolution: Bundler`.

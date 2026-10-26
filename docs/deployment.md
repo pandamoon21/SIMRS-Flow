@@ -57,7 +57,7 @@ SSE stream uses unnamed `data:` frames and does not send wildcard CORS.
 ## Windows host prerequisites
 
 - Windows PC dedicated to the pilot and kept powered on during use;
-- Node.js >= 20 and npm >= 9;
+- Node.js >= 22 and npm >= 9;
 - repository checkout and permission to run `run.bat`;
 - a persistent access-controlled directory for audit files;
 - a stable LAN IP or a DHCP reservation;
@@ -75,7 +75,7 @@ Run these steps from the repository root on the host.
 
 ### 1. Install and verify prerequisites
 
-Install Node.js 20 or newer, then open a new Command Prompt and verify:
+Install Node.js 22 or newer, then open a new Command Prompt and verify:
 
 ```bat
 node --version
