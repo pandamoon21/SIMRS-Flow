@@ -12,7 +12,7 @@ import { RuleStore } from './rules.js';
 import { NaikKelasStore } from './naikKelas.js';
 import { accessUrls, corsOriginsFromEnv, env } from './config.js';
 import { networkInterfaces } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /** Placeholder until EVOMEDIS_BASE_URL is set: logins fail, offline fixtures still work. */
@@ -66,13 +66,13 @@ async function main(): Promise<void> {
   }
   const qaAuth = qaAuthToken ? { token: qaAuthToken, operator: env('QA_AUTH_OPERATOR', 'qa-operator')! } : undefined;
   const secureCookies = env('APP_COOKIE_SECURE', '0') === '1';
-  // Pilot convenience: skip the human gate/plan confirmation for write runs.
-  // Everything else (allowlist, preconditions, read-after-write verification,
-  // audit trail) still applies. Off unless the host opts in.
-  const autoApproveWrites = env('AUTO_APPROVE_WRITES', '0') === '1';
+  // Write runs approve their own gates/plans by default: one operator runs the
+  // app as a helper. Allowlist, preconditions, read-after-write verification and
+  // the audit trail still apply; AUTO_APPROVE_WRITES=0 restores the human click.
+  const autoApproveWrites = env('AUTO_APPROVE_WRITES', '1') === '1';
 
-  // Single-operator site: CRITICAL_APPROVALS=1 lets one operator approve verifikasi/tampung bayar.
-  const criticalApprovals = env('CRITICAL_APPROVALS', '2') === '1' ? 1 : 2;
+  // Default matches real use: one operator works the whole patient set (CRITICAL_APPROVALS=2 for two-person sites).
+  const criticalApprovals = env('CRITICAL_APPROVALS', '1') === '2' ? 2 : 1;
   // Rules-page values are configuration, not run state: always persisted.
   const rules = new RuleStore(env('RULES_DIR', './.data/rules'));
   // Iur naik kelas: stored snapshot of the doctors' form sheet, re-read once per
@@ -105,7 +105,8 @@ async function main(): Promise<void> {
     // eslint-disable-next-line no-console
     for (const url of accessUrls(host, port, networkInterfaces()).urls) console.log(`[orchestrator] open: ${url}`);
     // eslint-disable-next-line no-console
-    console.log(`[orchestrator] audit ledger: ${auditDir}`);
+    // Relative data paths resolve from the process directory (apps/orchestrator under npm, app\ in the portable build).
+    console.log(`[orchestrator] audit ledger: ${resolve(auditDir)}`);
     // eslint-disable-next-line no-console
     console.log(`[orchestrator] EvoMedis target: ${baseUrlV1}`);
     // eslint-disable-next-line no-console

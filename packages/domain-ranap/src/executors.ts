@@ -4850,7 +4850,7 @@ export function createRanapExecutors(deps: RanapDeps): ExecutorRegistry {
     // records that the pipeline reached it.
     'ranap.finalGate': (ctx) => {
       const regs = Object.keys(roomGroupsOf(ctx)).length;
-      return reasoned(ok(`Siap verifikasi ${regs} grup rawat inap — menunggu persetujuan dua operator`), 'Gerbang persetujuan sebelum verifikasi ditulis ke SIMRS', [
+      return reasoned(ok(`Siap verifikasi ${regs} grup rawat inap — menunggu persetujuan`), 'Gerbang persetujuan sebelum verifikasi ditulis ke SIMRS', [
         { label: `${regs} grup lolos pra-verifikasi`, ok: true },
         { label: 'Persetujuan operator', ok: null, detail: 'operator menyetujui atau menolak di Inspector' },
       ]);

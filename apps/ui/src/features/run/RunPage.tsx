@@ -231,7 +231,11 @@ export function RunPage(props: RunPageProps) {
     // With a run on screen the operator's own choice stands: returning from another page must not reopen it.
     try {
       const saved = parsePanelLayout(localStorage.getItem(PANEL_LAYOUT_KEY), viewport);
-      if (!saved) return defaultPanelLayout(viewport);
+      if (!saved) {
+        // Reviewing a run (History, deep link): the new-run form would only cover the canvas.
+        const fresh = defaultPanelLayout(viewport);
+        return hasRunContext ? { ...fresh, panels: { ...fresh.panels, setup: { ...fresh.panels.setup, open: false } } } : fresh;
+      }
       return hasRunContext ? saved : { ...saved, panels: { ...saved.panels, setup: { ...saved.panels.setup, open: true } } };
     }
     catch { return defaultPanelLayout(viewport); }

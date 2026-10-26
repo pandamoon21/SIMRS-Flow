@@ -183,24 +183,14 @@ export const rajalRuleCatalog: RuleCatalog = {
           "text": "Tidak ada kunjungan"
         },
         {
-          "status": "blocked",
-          "text": "Rencana kemoterapi pada … kunjungan: … — tidak bisa ditagih sebagai kunjungan rawat jalan biasa"
-        },
-        {
-          "status": "needs_review",
-          "text": "… kunjungan tersisa setelah cek onkologi; rencana kemoterapi pada … kunjungan: …"
-        },
-        {
-          "status": "success",
-          "text": "Tidak ada rencana kemoterapi pada … kunjungan"
+          "status": "skipped",
+          "text": "Tidak dicek — SIMRS tidak lagi menyediakan rencana onkologi; pastikan pasien kemoterapi secara manual"
         }
       ],
       "issues": [],
       "findings": [],
       "actions": [],
-      "reads": [
-        "kasir.getRencanaOnko"
-      ],
+      "reads": [],
       "writes": []
     },
     {
@@ -755,12 +745,6 @@ export const rajalRuleCatalog: RuleCatalog = {
       "kind": "read",
       "riskLevel": "low",
       "description": "Billable line items for a transaction."
-    },
-    "kasir.getRencanaOnko": {
-      "id": "kasir.getRencanaOnko",
-      "kind": "read",
-      "riskLevel": "low",
-      "description": "Oncology treatment plan for a visit ({no_registrasikunjungan}); an `isi_perencanaan` naming chemotherapy abandons the record (rajal_v23.js:887)."
     },
     "kasir.tampungBayar": {
       "id": "kasir.tampungBayar",

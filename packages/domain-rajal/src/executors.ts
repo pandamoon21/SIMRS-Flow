@@ -23,7 +23,6 @@ import {
   buildRajalTampungBayarPayload,
   buildRajalUnpaidReportQuery,
   evaluateRajalExitDateResponse,
-  evaluateRajalOncologyPlan,
   evaluateRajalConsultVisit,
   evaluateRajalOrderBlocker,
   evaluateRajalPenunjangBlocker,
@@ -809,51 +808,20 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
     },
 
     /**
-     * Legacy source lines 886-889: an oncology plan whose `isi_perencanaan`
-     * names chemotherapy means the visit belongs to a chemo course and must not
-     * be billed as an ordinary outpatient visit — legacy abandons the record.
-     *
-     * Reads `kasir.getRencanaOnko` per record. Legacy's optional chaining
-     * treated an unreadable/non-JSON reply as "no chemo" and paid; the port does
-     * the same, with a debug log, unless readable text names chemotherapy.
+     * Legacy source lines 886-889 read `kasir.getRencanaOnko` to drop chemo-course
+     * visits. SIMRS no longer has that page (404 on every registration, checked
+     * live 2026-10-27), and legacy read any failure as "no chemo" — so the check
+     * had been silently passing everything. The node now says so instead of
+     * spending one dead request per patient.
+     * ponytail: re-wire `evaluateRajalOncologyPlan` if SIMRS restores the endpoint.
      */
     'rajal.checkRencanaOnko': async (ctx) => {
       const matching = get<RajalRecordRow[]>(ctx, 'matching') ?? [];
       if (matching.length === 0) return { status: 'skipped', summary: 'Tidak ada kunjungan' };
-      const kept: RajalRecordRow[] = [];
-      const blocking: string[] = [];
-      const dropped = new Set<string>();
-      for (const rec of matching) {
-        let response: unknown = null;
-        try {
-          response = await client.postJson<unknown>(
-            'kasir.getRencanaOnko',
-            { no_registrasikunjungan: rec.no_registrasikunjungan },
-            { signal: ctx.signal },
-          );
-        } catch (err) {
-          ctx.log(`Rencana onko unreadable on ${rec.no_transaksi}: ${err instanceof Error ? err.message : String(err)}`, 'debug');
-        }
-        const verdict = evaluateRajalOncologyPlan(response);
-        if (verdict.blocking) {
-          blocking.push(`${rec.no_transaksi} ("${verdict.plan}")`);
-          dropped.add(rec.no_transaksi);
-        } else kept.push(rec);
-      }
-      if (dropped.size > 0) {
-        ctx.scratch.matching = kept;
-        pruneRajalRecords(ctx, dropped);
-        if (blocking.length > 0 && kept.length === 0) {
-          return blocked(
-            `Rencana kemoterapi pada ${blocking.length} kunjungan: ${blocking.join('; ')} — tidak bisa ditagih sebagai kunjungan rawat jalan biasa`,
-          );
-        }
-        return {
-          status: 'needs_review',
-          summary: `${kept.length} kunjungan tersisa setelah cek onkologi; rencana kemoterapi pada ${blocking.length} kunjungan: ${blocking.join('; ')}`,
-        };
-      }
-      return ok(`Tidak ada rencana kemoterapi pada ${matching.length} kunjungan`);
+      return {
+        status: 'skipped',
+        summary: 'Tidak dicek — SIMRS tidak lagi menyediakan rencana onkologi; pastikan pasien kemoterapi secara manual',
+      };
     },
 
     /**

@@ -2140,49 +2140,14 @@ describe('rajal ported guards', () => {
     expect(mutatingCalls(transport)).toHaveLength(0);
   });
 
-  /** Oncology plan. Legacy line 887, now reading `kasir.getRencanaOnko`. */
-  it('passes when the oncology plan does not name chemotherapy', async () => {
-    const { result } = await runRajal({}, 'rajal_onko_clean');
+  /** Oncology plan. Legacy line 887; SIMRS dropped `kasir.getRencanaOnko` (404, 2026-10-27). */
+  it('skips the oncology check without calling the removed endpoint, and keeps paying', async () => {
+    const { result, transport } = await runRajal({}, 'rajal_onko_gone');
     const node = result.state.nodes.check_rencana_onko!;
-    expect(node.status).toBe('success');
-    expect(node.summary).toBe('Tidak ada rencana kemoterapi pada 1 kunjungan');
-  });
-
-  it('blocks the record when the oncology plan names chemotherapy', async () => {
-    const { result, transport } = await runRajal(
-      { 'kasir.getRencanaOnko': { text: JSON.stringify({ isi_perencanaan: 'Rencana KEMOTERAPI siklus 3' }) } },
-      'rajal_onko_kemo',
-    );
-
-    const node = result.state.nodes.check_rencana_onko!;
-    expect(node.status).toBe('blocked');
-    expect(node.summary).toMatch(/Rencana kemoterapi pada 1 kunjungan: 01-200001/);
-    expect(node.summary).toMatch(/Rencana KEMOTERAPI siklus 3/);
-    expect(result.state.nodes.submit_payment!.proposedMutations).toHaveLength(0);
-    expect(mutatingCalls(transport)).toHaveLength(0);
-  });
-
-  it('continues when the optional oncology plan has no readable plan text', async () => {
-    // Legacy's `onko?.isi_perencanaan?.toLowerCase()` treats this as no chemo signal.
-    const { result } = await runRajal(
-      { 'kasir.getRencanaOnko': { text: JSON.stringify({ isi_perencanaan: null }) } },
-      'rajal_onko_unreadable',
-    );
-
-    expect(result.state.nodes.check_rencana_onko!.status).toBe('success');
-    expect(result.state.nodes.check_rencana_onko!.summary).toBe('Tidak ada rencana kemoterapi pada 1 kunjungan');
-    expect(result.state.nodes.validate_transaction!.status).toBe('success');
-  });
-
-  it('continues when the optional oncology endpoint returns non-JSON', async () => {
-    const { result, transport } = await runRajal(
-      { 'kasir.getRencanaOnko': { text: 'not json at all' } },
-      'rajal_onko_error',
-    );
-
-    expect(result.state.nodes.check_rencana_onko!.status).toBe('success');
+    expect(node.status).toBe('skipped');
+    expect(node.summary).toMatch(/tidak lagi menyediakan rencana onkologi/);
+    expect(transport.calls.some((c) => c.headers['x-endpoint-id'] === 'kasir.getRencanaOnko')).toBe(false);
     expect(result.state.nodes.submit_payment!.proposedMutations.length).toBeGreaterThan(0);
-    expect(mutatingCalls(transport)).toHaveLength(0);
   });
 
   it('blocks when a required treatment group is unsatisfied', async () => {
@@ -2582,13 +2547,10 @@ describe('rajal request shapes', () => {
   it('keys the per-record blockers on the registration, as legacy does', async () => {
     const { transport } = await runRajal({}, 'rajal_shape_record_blockers');
 
-    // Legacy source line 887 — the oncology plan is scoped to the registration.
-    expect(bodyOf(transport, 'kasir.getRencanaOnko')).toEqual({ no_registrasikunjungan: 'REG-RJ-1' });
     // Legacy source line 891 — same for the discharge tab.
     expect(bodyOf(transport, 'poliklinik.getDataCaraKeluarTab')).toEqual({
       no_registrasikunjungan: 'REG-RJ-1',
     });
-    expect(callFor(transport, 'kasir.getRencanaOnko').url).toMatch(/kasir\/kasir\/get_rencana_onko$/);
     expect(callFor(transport, 'poliklinik.getDataCaraKeluarTab').url).toMatch(
       /poliklinik\/poliklinik\/getdatacarakeluar_tab$/,
     );

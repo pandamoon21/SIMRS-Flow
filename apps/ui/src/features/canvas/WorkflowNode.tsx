@@ -41,6 +41,8 @@ export interface WorkflowNodeData {
   groupLabel: string;
   kind: NodeKind;
   status: NodeStatus;
+  /** The run is over: a still-pending node was never run, not "waiting". */
+  runEnded?: boolean;
   riskLevel?: RiskLevel;
   durationMs?: number;
   summary?: string;
@@ -141,6 +143,7 @@ export function planProgressLabel(data: WorkflowNodeData): string {
  */
 export function statusLabelOf(data: WorkflowNodeData): string {
   const base = NODE_STATUS_LABEL[data.status];
+  if (data.runEnded && (data.status === 'pending' || data.status === 'queued')) return 'Tidak dijalankan';
   if (data.status === 'success' && data.plansFailed) return 'Selesai — ada plan gagal';
   return base;
 }
@@ -148,6 +151,7 @@ export function statusLabelOf(data: WorkflowNodeData): string {
 export function nodeSummaryText(data: WorkflowNodeData): string {
   const summary = data.summary?.trim();
   if (summary) return summary;
+  if ((data.status === 'pending' || data.status === 'queued') && data.runEnded) return 'Run berhenti sebelum langkah ini';
   if (data.status === 'pending' || data.status === 'queued') return 'Belum diproses';
   if (data.status === 'skipped') return 'Tidak ada yang dikerjakan';
   return NODE_STATUS_LABEL[data.status];

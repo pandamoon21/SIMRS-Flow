@@ -7,7 +7,7 @@
 - **ranap** (*rawat inap*, inpatient) — 34-node verification (incl. the opt-in OCR `check_berkas` notice) + `tampung_bayar` workflow ported from legacy `ranap_v3.py`.
 - **rajal** (*rawat jalan*, outpatient) — unpaid-bill batch workflow ported from a legacy GreasyFork userscript.
 
-It is intentionally **safety-first**: preview (dry-run) is the default, mutations are allowlisted and plan/approve gated, critical steps need two operators, and every event is written to a redacted append-only audit ledger. The repo is pilot-stage: one Windows host, LAN-only, one patient/episode per live run.
+It is intentionally **safety-first**: preview (dry-run) is the default, mutations are allowlisted and plan/approve gated, write runs auto-approve on the operator's behalf by default (one operator; `CRITICAL_APPROVALS=2` / `AUTO_APPROVE_WRITES=0` restore the two-person, click-to-approve mode), and every event is written to a redacted append-only audit ledger. The repo is pilot-stage: one Windows host, LAN-only, one patient/episode per live run.
 
 Domain vocabulary you will meet in code: `rajal`/`ranap` (outpatient/inpatient), `kunjungan` (visit), `nomedrec`/`no RM` (medical record no.), `resep`/`obat` (prescription/drug), `penunjang` (lab/radiology), `poli` (clinic), `SEP` (BPJS claim letter), `titipan`/`kelas` (room class), `tampung bayar` (payment staging), `verifikator` (billing verification step), `visite` (doctor round), `gizi` (nutrition), `IBS` (inpatient billing).
 
@@ -39,7 +39,7 @@ Concrete data flow for one preview run:
 
 - Preview by default; `EXECUTION_MODE` is deployment posture and does **not** auto-enable writes. Write runs require an authenticated operator (401 otherwise).
 - Mutations fail closed at three layers: registry endpoint allowlist, `EvoMedisClient` (preview/approval/allowlist re-check), mutation gate preconditions + verification.
-- Critical-risk gates/plans require 2 distinct operator approvals (`gateApprovalsRequired` / `planApprovalsRequired`).
+- Critical-risk gates/plans need `CRITICAL_APPROVALS` distinct operator approvals (default 1; `gateApprovalsRequired` / `planApprovalsRequired`). Auto-approve never skips the allowlist, preconditions or read-after-write verification.
 - Cookies never authorize writes — mutations require the bearer token.
 - No patient-count limit per run (rajal batches whole clinic-days); ranap stays one patient per run by its own input check. Rajal auto-fetch takes an optional `discovery.maxPatients` cap.
 - `packages/evomedis-client/src/transport.ts` falls back to `FixtureTransport` so the UI works fully offline.

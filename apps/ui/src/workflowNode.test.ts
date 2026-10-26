@@ -35,6 +35,10 @@ describe('run node card projection', () => {
 
   it('humanises statuses instead of printing raw tokens', () => {
     expect(statusLabelOf(nodeData({ status: 'gate_waiting' }))).toBe('Menunggu persetujuan');
+    // Once the run is over, a node it never reached is not "waiting".
+    expect(statusLabelOf(nodeData({ status: 'pending' }))).toBe('Menunggu');
+    expect(statusLabelOf(nodeData({ status: 'pending', runEnded: true }))).toBe('Tidak dijalankan');
+    expect(nodeSummaryText(nodeData({ status: 'pending', runEnded: true }))).toBe('Run berhenti sebelum langkah ini');
     expect(statusLabelOf(nodeData({ status: 'needs_review' }))).toBe('Perlu ditinjau');
     expect(statusLabelOf(nodeData({ status: 'blocked' }))).toBe('Terblokir');
     expect(statusLabelOf(nodeData({ status: 'success' }))).toBe('Selesai');
