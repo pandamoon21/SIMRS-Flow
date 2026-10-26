@@ -3,7 +3,7 @@
  * present those contracts through the CoreUI dashboard shell.
  */
 
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { ranapWorkflow } from '@simrs-flow/domain-ranap';
 import { rajalWorkflow } from '@simrs-flow/domain-rajal';
 import { mockEventStream } from '@simrs-flow/test-fixtures';
@@ -13,14 +13,8 @@ import { useRunStore } from '../store/runStore.js';
 import { api, UnauthorizedError, type RunSummary } from '../api/client.js';
 import { LoginGate } from './LoginGate.js';
 import { DashboardShell, type DashboardPage } from './DashboardShell.js';
-import { RuleCatalogPage } from '../features/rules/RuleCatalogPage.js';
-import { DashboardHome } from '../features/dashboard/DashboardHome.js';
-import { RekapPage, type PatientFilter } from '../features/dashboard/RekapPage.js';
-import { NaikKelasPage } from '../features/naikKelas/NaikKelasPage.js';
+import type { PatientFilter } from '../features/dashboard/RekapPage.js';
 import { RunPage } from '../features/run/RunPage.js';
-import { RunHistory } from '../features/history/RunHistory.js';
-import { ReviewQueue } from '../features/review/ReviewQueue.js';
-import { SettingsHealth } from '../features/settings/SettingsHealth.js';
 import { Card, CardBody, Spinner } from '../ui/primitives.js';
 import { toast, ToastHost } from '../ui/toast.js';
 import { reducedMotion } from '../ui/motion.js';
@@ -33,6 +27,16 @@ const WORKFLOWS: Record<string, WorkflowDefinition> = {
 const WORKFLOW_LABELS = Object.fromEntries(Object.values(WORKFLOWS).map((workflow) => [workflow.id, workflow.label]));
 
 export type Source = 'offline' | 'live';
+
+// Pages other than Run load on first visit: opening a run on a slow office PC
+// should not first parse the dashboard, rekap, rules and settings code.
+const DashboardHome = lazy(() => import('../features/dashboard/DashboardHome.js').then((m) => ({ default: m.DashboardHome })));
+const RekapPage = lazy(() => import('../features/dashboard/RekapPage.js').then((m) => ({ default: m.RekapPage })));
+const NaikKelasPage = lazy(() => import('../features/naikKelas/NaikKelasPage.js').then((m) => ({ default: m.NaikKelasPage })));
+const RunHistory = lazy(() => import('../features/history/RunHistory.js').then((m) => ({ default: m.RunHistory })));
+const ReviewQueue = lazy(() => import('../features/review/ReviewQueue.js').then((m) => ({ default: m.ReviewQueue })));
+const RuleCatalogPage = lazy(() => import('../features/rules/RuleCatalogPage.js').then((m) => ({ default: m.RuleCatalogPage })));
+const SettingsHealth = lazy(() => import('../features/settings/SettingsHealth.js').then((m) => ({ default: m.SettingsHealth })));
 
 /** Streamed events are applied in batches this far apart (one render per batch). */
 const EVENT_BATCH_MS = 50;
@@ -438,6 +442,7 @@ export function App() {
       onPageChange={changePage}
       onLogout={() => void logout()}
     >
+      <Suspense fallback={<div className="page-loading" role="status"><Spinner size="sm" /> Memuat halaman…</div>}>
       {page === 'home' ? <DashboardHome onNavigate={changePage} onOpenRun={(run) => void openHistoryRun(run)} onOpenPatients={(f) => { setPatientFilter(f); changePage('rekap'); }} onUnauthorized={onUnauthorized} /> : null}
       {page === 'run' ? (
         <RunPage
@@ -499,6 +504,7 @@ export function App() {
       ) : null}
       {page === 'rules' ? <RuleCatalogPage onUnauthorized={onUnauthorized} onDirtyChange={onRulesDirty} /> : null}
       {page === 'settings' ? <SettingsHealth onUnauthorized={onUnauthorized} /> : null}
+      </Suspense>
     </DashboardShell>
     <ToastHost />
     </>

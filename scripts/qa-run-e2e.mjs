@@ -206,7 +206,16 @@ const q = await evaluate(`({ ...window.__qa, elapsed: performance.now() - window
 const end = await heap();
 // After the run: scroll the log and the patient cards, the busiest views.
 const afterClicks = [];
-for (const p of ['^Log$', '^Kanvas$']) { const ms = await timedClick(p); if (ms !== null) afterClicks.push({ p, ms }); }
+if (args['profile-click']) { await send('Profiler.enable'); await send('Profiler.setSamplingInterval', { interval: 200 }); await send('Profiler.start'); }
+for (const p of ['^Log$', '^Kanvas$']) { const ms = await timedClick(p); if (ms !== null) afterClicks.push({ p, ms }); if (args['profile-click']) break; }
+if (args['profile-click']) {
+  const { profile: prof } = await send('Profiler.stop');
+  const self = new Map();
+  prof.samples.forEach((nodeId, i) => self.set(nodeId, (self.get(nodeId) ?? 0) + (prof.timeDeltas[i] ?? 0)));
+  const byFn = new Map();
+  for (const node of prof.nodes) { const f = node.callFrame; const key = `${f.functionName || '(anon)'} :${f.lineNumber + 1}`; byFn.set(key, (byFn.get(key) ?? 0) + (self.get(node.id) ?? 0)); }
+  console.log('CLICK TOP (ms):', JSON.stringify([...byFn].sort((a, b) => b[1] - a[1]).slice(0, 20).map(([k, v]) => [k, Math.round(v / 1000)])));
+}
 await shot(`${tag}.png`);
 const finalUi = await evaluate(`({
   badge: document.querySelector('.run-status-badge')?.textContent.trim() ?? '',
