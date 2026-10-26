@@ -159,6 +159,7 @@ import {
   type RowStatusProvider,
   type TindakanOp,
   type TindakanSyncIssue,
+  pelaksanaHarga,
 } from './logic/tindakanSync.js';
 import {
   getSpesialisActionKey,
@@ -7363,7 +7364,7 @@ function visiteOpPlan(
             noTransaksi: op.noTransaksi,
             pelaksana,
             kdTindakan: op.kdTindakan ?? '',
-            harga: str(op.row, 'harga') || op.correctedHargaRaw || '',
+            harga: (op.row && str(op.row, 'harga') ? pelaksanaHarga(op.row) : '') || op.correctedHargaRaw || '',
             kdKomponen: op.kdKomponen ?? '',
             urutTindakan: op.urutTindakan ?? '',
           }),

@@ -104,6 +104,22 @@ import { rowsOf, str } from './types.js';
  *  - `tampungPelaksana` — `tampung_pelaksana_tindakan` (`ranap_v3.py:4193`),
  *    called by `_tampung_pelaksana_checked` (`ranap_v3.py:4440`)
  */
+
+/**
+ * `harga` for `tampung_pelaksana`: SIMRS takes it as the *line* total and divides
+ * by qty to get the unit price (live 2026-10-27: a qty-2 MEDIKASI sent its unit
+ * price 15 000 and came back 2 x 7 500, the bill Rp 15 000 short). So send
+ * `jumlah`, else harga x qty. Legacy `_tampung_pelaksana_checked`
+ * (ranap_v3.py:4477) sent the unit price and had the same bug on qty > 1.
+ */
+export function pelaksanaHarga(row: Record<string, unknown>): string {
+  const jumlah = Number(row['jumlah']);
+  if (Number.isFinite(jumlah) && jumlah > 0) return String(jumlah);
+  const harga = Number(row['harga']);
+  const qty = Number(row['qty']) || 1;
+  return Number.isFinite(harga) && String(row['harga'] ?? '').trim() !== '' ? String(harga * qty) : String(row['harga'] ?? '');
+}
+
 export const TINDAKAN_SYNC_ENDPOINTS = {
   updateTgl: 'penatajasaInap.updateTgl',
   hapus: 'penatajasaInap.hapusTindakan',
@@ -2399,7 +2415,7 @@ export function planTindakanSync(args: PlanTindakanSyncArgs): TindakanSyncPlan {
         tglJam: str(row, 'tgl_jam'),
         pelaksana: roomPelaksana,
         kdKomponen: kdKomponenJasa,
-        harga: str(row, 'harga'),
+        harga: pelaksanaHarga(row),
         hargaPersen: hargaPersenJasa,
         diskon: diskonJasa,
         nilai: nilaiJasa,
@@ -2447,7 +2463,7 @@ export function planTindakanSync(args: PlanTindakanSyncArgs): TindakanSyncPlan {
         tglJam: str(row, 'tgl_jam'),
         pelaksana: '',
         kdKomponen: '29',
-        harga: str(row, 'harga'),
+        harga: pelaksanaHarga(row),
         reason: `pelaksana dpjb harus kosong${currentName ? ` (sekarang ${currentName})` : ''}`,
       });
     }
@@ -2594,7 +2610,7 @@ export function planTindakanSync(args: PlanTindakanSyncArgs): TindakanSyncPlan {
         tglJam: str(row, 'tgl_jam'),
         pelaksana: desiredPelaksana,
         kdKomponen: '98',
-        harga: str(row, 'harga'),
+        harga: pelaksanaHarga(row),
         reason: `pelaksana ${syncLabel.toLowerCase()} harus ${desiredPelaksana}${
           currentName ? ` (sekarang ${currentName})` : ''
         }`,
