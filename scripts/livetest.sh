@@ -53,8 +53,8 @@ chk "anonymous workflow read 401s" '[[ "$ANON_READ" == "401" ]]'
 WF=$(curl -s "${AUTH[@]}" "http://127.0.0.1:$PORT/api/workflows")
 chk "lists ranap" '[[ "$WF" == *"ranap-verifikasi-tampung-bayar"* ]]'
 chk "lists rajal" '[[ "$WF" == *"rajal-patient-processor"* ]]'
-chk "ranap has 33 nodes" '[[ "$WF" == *"\"nodeCount\":33"* ]]'
-chk "rajal has 21 nodes" '[[ "$WF" == *"\"nodeCount\":21"* ]]'
+chk "ranap has 34 nodes" '[[ "$WF" == *"\"nodeCount\":34"* ]]'
+chk "rajal has 22 nodes" '[[ "$WF" == *"\"nodeCount\":22"* ]]'
 
 # ---- 3. workflow definition ----
 DEF=$(curl -s "${AUTH[@]}" "http://127.0.0.1:$PORT/api/workflows/ranap-verifikasi-tampung-bayar")
