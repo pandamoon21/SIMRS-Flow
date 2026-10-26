@@ -59,23 +59,23 @@ export function DashboardHome({ onNavigate, onOpenRun, onOpenPatients, onUnautho
         <div>
           <span className="page-eyebrow">SIMRS-Flow / operator desk</span>
           <h1>Overview</h1>
-          <p>See what is running, what needs attention, and whether this host is ready.</p>
+          <p>Pantau run yang berjalan, yang perlu perhatian, dan kesiapan host.</p>
         </div>
         <div className="page-heading-actions">
-          <Badge color={health?.ok ? 'success' : 'warning'}>{health?.ok ? 'Host online' : 'Host status unknown'}</Badge>
-          <Button color="info" type="button" onClick={() => onNavigate('run')}>Start a run</Button>
+          <Badge color={health?.ok ? 'success' : 'warning'}>{health?.ok ? 'Host aktif' : 'Status host tidak diketahui'}</Badge>
+          <Button color="info" type="button" onClick={() => onNavigate('run')}>Mulai run</Button>
         </div>
       </header>
 
       {error ? <Alert color="danger">Overview unavailable: {error}</Alert> : null}
-      {loading && !health ? <div className="page-loading" role="status"><Spinner size="sm" /> Loading operational status…</div> : null}
+      {loading && !health ? <div className="page-loading" role="status"><Spinner size="sm" /> Memuat status…</div> : null}
       <SkylineStrip className="page-horizon" />
 
       <Row className="g-3">
         <Col sm={6} xl={4}><Card className="metric-card metric-accent" onClick={() => onNavigate('rekap')}><CardBody><span className="metric-label">Billing dikerjakan hari ini</span><strong className="metric-strong-sm">{formatRupiahShort(billingToday)}</strong><span className="metric-note">koreksi bayar tervalidasi</span></CardBody></Card></Col>
         <Col sm={6} xl={2}><Card className="metric-card metric-warn" onClick={() => onOpenPatients('titipan')}><CardBody><span className="metric-label">Pasien titipan</span><strong>{billing?.titipanToday ?? 0}</strong><span className="metric-note">beda kelas · tanpa bayar</span></CardBody></Card></Col>
         <Col sm={6} xl={2}><Card className="metric-card" onClick={() => onOpenPatients('naik_kelas')}><CardBody><span className="metric-label">Pasien naik kelas</span><strong>{billing?.naikKelasToday ?? 0}</strong><span className="metric-note">bayar selisih kelas</span></CardBody></Card></Col>
-        <Col sm={6} xl={2}><Card className={`metric-card${attention > 0 ? ' metric-warn' : ''}`} onClick={() => onOpenPatients('attention')}><CardBody><span className="metric-label">Needs attention</span><strong>{attention}</strong><span className="metric-note">review before retrying</span></CardBody></Card></Col>
+        <Col sm={6} xl={2}><Card className={`metric-card${attention > 0 ? ' metric-warn' : ''}`} onClick={() => onOpenPatients('attention')}><CardBody><span className="metric-label">Perlu perhatian</span><strong>{attention}</strong><span className="metric-note">review before retrying</span></CardBody></Card></Col>
         <Col sm={6} xl={2}><Card className="metric-card" onClick={() => onNavigate('settings')}><CardBody><span className="metric-label">Service</span><strong>{health?.ok ? 'OK' : 'Check'}</strong><span className="metric-note">{health?.ts ? `checked ${displayTime(health.ts)}` : 'not checked'}</span></CardBody></Card></Col>
       </Row>
 
@@ -88,18 +88,18 @@ export function DashboardHome({ onNavigate, onOpenRun, onOpenPatients, onUnautho
       <Row className="g-3">
         <Col xl={7}>
           <Card className="surface-card">
-            <CardHeader className="card-header-actions"><span>Active work</span><RefreshButton onRefresh={load} title="Muat ulang run aktif" /></CardHeader>
+            <CardHeader className="card-header-actions"><span>Run berjalan</span><RefreshButton onRefresh={load} title="Muat ulang run aktif" /></CardHeader>
             <CardBody>
-              {active.length === 0 ? <div className="empty">No active runs. Start a preview when ready.</div> : <div className="run-list">{active.map((run) => <RunRow key={run.runId} run={run} onOpenRun={onOpenRun} />)}</div>}
+              {active.length === 0 ? <div className="empty">Tidak ada run berjalan.</div> : <div className="run-list">{active.map((run) => <RunRow key={run.runId} run={run} onOpenRun={onOpenRun} />)}</div>}
             </CardBody>
           </Card>
         </Col>
         <Col xl={5}>
           <Card className="surface-card">
-            <CardHeader className="card-header-actions"><span>Recent attention</span><Button color="secondary" variant="outline" size="sm" onClick={() => onNavigate('history')}>View history</Button></CardHeader>
+            <CardHeader className="card-header-actions"><span>Perhatian terbaru</span><Button color="secondary" variant="outline" size="sm" onClick={() => onNavigate('history')}>Lihat riwayat</Button></CardHeader>
             <CardBody>
               {recent.slice(0, 5).map((run) => <RunRow key={run.runId} run={run} onOpenRun={onOpenRun} />)}
-              {recent.length === 0 ? <div className="empty">No completed runs yet.</div> : null}
+              {recent.length === 0 ? <div className="empty">Belum ada run selesai.</div> : null}
             </CardBody>
           </Card>
         </Col>
@@ -123,7 +123,7 @@ function RunRow({ run, onOpenRun }: { run: RunSummary; onOpenRun: (run: RunSumma
   const attention = needsAttention(run);
   return (
     <div className="run-list-row">
-      <div className="run-list-meta"><Badge color={runStatusColor(run)}>{runStatusLabel(run)}</Badge>{attention ? <Badge color="warning">Needs attention</Badge> : null}<span>{run.mode}</span><span>{displayTime(run.startedAt)}</span></div>
+      <div className="run-list-meta"><Badge color={runStatusColor(run)}>{runStatusLabel(run)}</Badge>{attention ? <Badge color="warning">Perlu perhatian</Badge> : null}<span>{run.mode}</span><span>{displayTime(run.startedAt)}</span></div>
       <div className="run-list-main"><strong>{run.workflowId}</strong><span>{run.runId} · {runProvenanceLabel(run)}</span></div>
       <Button color="info" variant="outline" size="sm" disabled={!run.replayable} title={openRunTitle(run.replayable)} onClick={() => onOpenRun(run)}>Open</Button>
     </div>

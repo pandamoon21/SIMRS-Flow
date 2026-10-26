@@ -191,8 +191,8 @@ export class WorkflowRunner {
     const blockedByBranch = new Set<string>();
     const branchPruned = new Set<string>();
 
-    bus.emit({ ...base, type: 'run.created', message: `Run ${runId} created in ${mode} mode` });
-    bus.emit({ ...base, type: 'run.started', message: `Started in ${mode} mode` });
+    bus.emit({ ...base, type: 'run.created', message: `Run dibuat (${mode})` });
+    bus.emit({ ...base, type: 'run.started', message: `Run dimulai (${mode})` });
 
     let runFailed = false;
     let failMessage: string | undefined;
@@ -211,7 +211,7 @@ export class WorkflowRunner {
             ...base,
             type: 'node.skipped',
             nodeId: node.id,
-            message: `${node.label} disabled`,
+            message: `${node.label} dimatikan di Setup`,
             data: { summary: 'Disabled' },
           });
           blockingUpstream.add(node.id);
@@ -268,7 +268,7 @@ export class WorkflowRunner {
             ...base,
             type: 'node.skipped',
             nodeId: node.id,
-            message: `${node.label} skipped — upstream dependency unmet`,
+            message: `${node.label} dilewati — langkah sebelumnya belum terpenuhi`,
             data: { summary: 'Upstream unmet' },
           });
           blockingUpstream.add(node.id);
@@ -316,7 +316,7 @@ export class WorkflowRunner {
               type: 'node.replan_exhausted',
               nodeId: node.id,
               severity: 'warn',
-              message: `${node.label} asked for another pass and did not get one — ${reason} (pass ${pass}/${maxPasses})`,
+              message: `${node.label} butuh putaran tambahan tetapi tidak mendapatkannya — ${reason} (putaran ${pass}/${maxPasses})`,
               data: { pass, maxPasses, reason, planIds } satisfies ReplanEventData,
             });
 
@@ -356,7 +356,7 @@ export class WorkflowRunner {
               ...base,
               type: 'node.replanning',
               nodeId: node.id,
-              message: `${node.label} re-planning (pass ${pass}/${maxPasses})${decision.reason ? ` — ${decision.reason}` : ''}`,
+              message: `${node.label} merencanakan ulang (putaran ${pass}/${maxPasses})${decision.reason ? ` — ${decision.reason}` : ''}`,
               data: {
                 pass,
                 maxPasses,
@@ -406,7 +406,7 @@ export class WorkflowRunner {
         }
         if (result.status === 'blocked' && node.critical) {
           runFailed = true;
-          failMessage = `Critical node "${node.label}" blocked: ${result.summary}`;
+          failMessage = `Langkah kritis "${node.label}" tertahan: ${result.summary}`;
           break;
         }
       }
@@ -415,14 +415,14 @@ export class WorkflowRunner {
     }
 
     if (controller.signal.aborted) {
-      bus.emit({ ...base, type: 'run.cancelled', message: 'Run cancelled' });
+      bus.emit({ ...base, type: 'run.cancelled', message: 'Run dihentikan' });
     } else if (runFailed) {
       bus.emit({ ...base, type: 'run.failed', severity: 'error', message: failMessage });
     } else {
       bus.emit({
         ...base,
         type: 'run.completed',
-        message: `Completed ${completed.size}/${order.length} nodes`,
+        message: `${completed.size}/${order.length} langkah selesai`,
       });
     }
 
@@ -469,7 +469,7 @@ export class WorkflowRunner {
       try {
         // Gate nodes are resolved via the gate resolver.
         if (node.kind === 'gate') {
-          bus.emit({ ...base, type: 'gate.waiting', nodeId: node.id, message: `${node.label} awaiting approval` });
+          bus.emit({ ...base, type: 'gate.waiting', nodeId: node.id, message: `${node.label} menunggu persetujuan` });
           const decision = gateResolver
             ? await gateResolver(node, ctx)
             : { approved: false, reason: 'No gate resolver — held in preview' };

@@ -121,11 +121,11 @@ export function SettingsHealth({ onUnauthorized }: { onUnauthorized: () => void 
       <header className="page-heading">
         <div>
           <span className="page-eyebrow">Read-only operational posture</span>
-          <h1>Settings & health</h1>
+          <h1>Pengaturan & kesehatan</h1>
           <p>Alamat, target SIMRS, dan posisi host ini. Kredensial, cookie, token, dan respons mentah SIMRS tidak pernah ditampilkan di sini.</p>
         </div>
         <div className="page-heading-actions">
-          <Badge color={health?.ok ? 'success' : error ? 'danger' : 'secondary'}>{health?.ok ? 'Host online' : error ? 'Tidak terjangkau' : 'Memeriksa…'}</Badge>
+          <Badge color={health?.ok ? 'success' : error ? 'danger' : 'secondary'}>{health?.ok ? 'Host aktif' : error ? 'Tidak terjangkau' : 'Memeriksa…'}</Badge>
           <RefreshButton onRefresh={load} size={undefined} title="Periksa ulang host" />
         </div>
       </header>

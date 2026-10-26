@@ -397,7 +397,7 @@ export function RunPage(props: RunPageProps) {
     // A freshly loaded definition is also "created"; only a run that has produced events is live.
     (['running', 'paused'].includes(state!.status) || (state!.status === 'created' && eventCount > 0));
   useEffect(() => { if (!runStoppable) { setCancelArmed(false); setStopping(false); } }, [runStoppable]);
-  // An armed Stop falls back to "Stop run" after 4s, so no extra "keep running"
+  // An armed Stop falls back to "Hentikan" after 4s, so no extra "keep running"
   // button appears beside it and shifts the controls the operator is aiming at.
   useEffect(() => {
     if (!cancelArmed) return;
@@ -413,7 +413,7 @@ export function RunPage(props: RunPageProps) {
   };
   const stopButton = (size: 'sm' | 'lg', className = '') => (
     <Button className={`run-cancel-btn ${className}`} color="danger" variant={cancelArmed || stopping ? undefined : 'outline'} size={size} disabled={!runStoppable || stopping}
-      title={historical ? 'Historical replays cannot be cancelled' : runStoppable ? 'Hentikan run ini — tidak bisa dilanjutkan. Klik dua kali untuk konfirmasi.' : 'Run sudah selesai'}
+      title={historical ? 'Riwayat run tidak bisa dihentikan' : runStoppable ? 'Hentikan run ini — tidak bisa dilanjutkan. Klik dua kali untuk konfirmasi.' : 'Run sudah selesai'}
       aria-live="polite" onBlur={() => setCancelArmed(false)} onKeyDown={(event) => { if (event.key === 'Escape') setCancelArmed(false); }}
       onClick={pressStop}>
       {stopping ? 'Menghentikan…' : cancelButtonLabel(cancelArmed)}
@@ -496,16 +496,16 @@ export function RunPage(props: RunPageProps) {
   ) : null;
   const berkasProgress = berkasProgressOf(state);
   const attention = attentionOf(state, (id) => workflow.nodes.find((node) => node.id === id)?.label ?? id);
-  const provenanceLabel = historical ? 'Historical ledger replay' : playback === 'replay' ? 'Fixture replay' : 'In-memory run detail';
+  const provenanceLabel = historical ? 'Riwayat run' : playback === 'replay' ? 'Data contoh' : 'Detail run';
 
   return (
     <div className="run-split" ref={surface}>
       {/* ── Setup panel ─────────────────────────────────────────────── */}
-      <aside className="run-setup-rail run-floating-panel" aria-label="Run setup" hidden={!layout.panels.setup.open} style={panelStyle('setup')} onPointerDown={() => raise('setup')}>
-        <div className="run-setup-head run-drag-header nodrag nopan" role="button" tabIndex={0} aria-label="Move setup panel; arrow keys move" onPointerDown={(event) => dragHeader('setup', event)} onKeyDown={(event) => moveByKey('setup', event)}>
-          <span className="page-eyebrow">Configure</span>
-          <h1>Run setup</h1>
-          <FontScale name="setup" label="Run setup" value={zoom.setup} onChange={setZoomOf} />
+      <aside className="run-setup-rail run-floating-panel" aria-label="Setup run" hidden={!layout.panels.setup.open} style={panelStyle('setup')} onPointerDown={() => raise('setup')}>
+        <div className="run-setup-head run-drag-header nodrag nopan" role="button" tabIndex={0} aria-label="Geser panel Setup; tombol panah untuk menggeser" onPointerDown={(event) => dragHeader('setup', event)} onKeyDown={(event) => moveByKey('setup', event)}>
+          <span className="page-eyebrow">Atur</span>
+          <h1>Setup run</h1>
+          <FontScale name="setup" label="Setup run" value={zoom.setup} onChange={setZoomOf} />
           <button type="button" className="run-panel-close" aria-label="Tutup run setup" onClick={() => toggle('setup')}>×</button>
         </div>
         <div className="run-setup-scroll">
@@ -522,10 +522,10 @@ export function RunPage(props: RunPageProps) {
             {switchConfirm('workflow')}
           </div>
           <div className="control-cluster">
-            <span className="control-label">Data source</span>
-            <ButtonGroup role="group" aria-label="Run source">
-              <Button color={source === 'offline' ? 'info' : 'secondary'} variant={source === 'offline' ? undefined : 'outline'} aria-pressed={source === 'offline'} title="Replay canned fixture data — never touches SIMRS" disabled={setupLocked} onClick={() => onSourceChange('offline')}>Fixture replay</Button>
-              <Button color={source === 'live' ? 'info' : 'secondary'} variant={source === 'live' ? undefined : 'outline'} aria-pressed={source === 'live'} title="Read from the live SIMRS instance with your operator session" disabled={setupLocked} onClick={() => onSourceChange('live')}>Live SIMRS</Button>
+            <span className="control-label">Sumber data</span>
+            <ButtonGroup role="group" aria-label="Sumber data">
+              <Button color={source === 'offline' ? 'info' : 'secondary'} variant={source === 'offline' ? undefined : 'outline'} aria-pressed={source === 'offline'} title="Memutar data contoh — tidak menyentuh SIMRS" disabled={setupLocked} onClick={() => onSourceChange('offline')}>Data contoh</Button>
+              <Button color={source === 'live' ? 'info' : 'secondary'} variant={source === 'live' ? undefined : 'outline'} aria-pressed={source === 'live'} title="Membaca SIMRS langsung dengan sesi login Anda" disabled={setupLocked} onClick={() => onSourceChange('live')}>Live SIMRS</Button>
             </ButtonGroup>
           </div>
           <RunInputForm domain={domain} source={source} onInputChange={onInputChange} viewingRunId={runId} />
@@ -540,8 +540,8 @@ export function RunPage(props: RunPageProps) {
           <div className="control-cluster">
             <span className="control-label">Execution mode</span>
             <ButtonGroup role="group" aria-label="Execution mode">
-              <Button color={mode === 'preview' ? 'info' : 'secondary'} variant={mode === 'preview' ? undefined : 'outline'} aria-pressed={mode === 'preview'} title="Dry run — mutations are surfaced as plans, nothing is written" disabled={setupLocked} onClick={() => requestMode('preview')}>Preview</Button>
-              <Button color={mode === 'write' ? 'write' : 'secondary'} variant={mode === 'write' ? undefined : 'outline'} aria-pressed={mode === 'write'} title="Writes require an allowlist, per-call approval, and verification" disabled={setupLocked} onClick={() => requestMode('write')}>Confirmed write</Button>
+              <Button color={mode === 'preview' ? 'info' : 'secondary'} variant={mode === 'preview' ? undefined : 'outline'} aria-pressed={mode === 'preview'} title="Uji coba — perubahan hanya ditampilkan sebagai rencana, tidak ada yang ditulis" disabled={setupLocked} onClick={() => requestMode('preview')}>Preview</Button>
+              <Button color={mode === 'write' ? 'write' : 'secondary'} variant={mode === 'write' ? undefined : 'outline'} aria-pressed={mode === 'write'} title="Setiap penulisan melewati daftar izin, persetujuan, dan verifikasi ulang" disabled={setupLocked} onClick={() => requestMode('write')}>Confirmed write</Button>
             </ButtonGroup>
             {switchConfirm('mode')}
           </div>
@@ -549,11 +549,11 @@ export function RunPage(props: RunPageProps) {
         <div className="run-setup-confirm">
           <dl className="summary-list">
             <dt>Workflow</dt><dd>{workflow.label}</dd>
-            <dt>Source</dt><dd>{source === 'live' ? 'Live SIMRS' : 'Fixture replay'}</dd>
+            <dt>Source</dt><dd>{source === 'live' ? 'Live SIMRS' : 'Data contoh'}</dd>
             <dt>Mode</dt><dd>{mode}</dd>
             <dt>Input</dt><dd>{runInput.error ?? runInput.summary}</dd>
           </dl>
-          {mode === 'write' ? <Alert color="warning" className="mb-0">Write mode still requires allowlists, approvals, locks, and verification.</Alert> : null}
+          {mode === 'write' ? <Alert color="warning" className="mb-0">Setiap penulisan tetap melewati daftar izin, persetujuan, kunci transaksi, dan verifikasi ulang.</Alert> : null}
           {/* Verifikasi off also drops the final gate, the only hold point: the run would end before any correction plan could be approved. */}
           {mode === 'write' && runInput.enabled?.final_gate === false ? (
             <Alert color="danger" className="mb-0">
@@ -561,10 +561,10 @@ export function RunPage(props: RunPageProps) {
             </Alert>
           ) : null}
           {mode === 'write' ? (
-            <div className="toggle-group write-auto-approve" role="group" aria-label="Auto approve write run">
+            <div className="toggle-group write-auto-approve" role="group" aria-label="Setujui otomatis">
               <FormCheck
                 id="run-auto-approve"
-                label="Auto-approve gate & mutasi"
+                label="Setujui otomatis"
                 title="Lewati konfirmasi manusia: gate dan rencana mutasi disetujui otomatis atas nama operator ini. Allowlist, precondition, verifikasi read-after-write, dan audit ledger tetap berlaku."
                 checked={autoApprove}
                 onChange={onAutoApproveChange}
@@ -579,7 +579,7 @@ export function RunPage(props: RunPageProps) {
           {startBlocker ? <div className="form-hint text-warning">Start blocked: {startBlocker}</div> : null}
           {runStoppable ? <div className="run-setup-stop-row">{pauseButton('lg')}{stopButton('lg', 'run-setup-stop')}</div> : (
             <Button color={mode === 'write' ? 'write' : 'info'} size="lg" type="button" disabled={Boolean(startBlocker) || setupLocked} title={setupLocked ? LOCKED_TITLE : undefined} onClick={onStart}>
-              {starting ? 'Memulai…' : mode === 'write' ? 'Start confirmed write' : 'Start preview'}
+              {starting ? 'Memulai…' : mode === 'write' ? 'Mulai run write' : 'Mulai preview'}
             </Button>
           )}
         </div>
@@ -595,7 +595,7 @@ export function RunPage(props: RunPageProps) {
             <RunSpinner state={glyph} kind={variant.spinner} />
             <div className="run-command-title">
               <span className="page-eyebrow">{provenanceLabel}</span>
-              <strong title={runId}>{runId ?? 'No run yet'}</strong>
+              <strong title={runId}>{runId ?? 'Belum ada run'}</strong>
               {/* Stage and attention change every few seconds; they live under the run id so
                   the controls on the right never move while the operator aims at Stop. */}
               {/* Always rendered (fixed height) so the bar never grows or shrinks under the cursor. */}
@@ -618,17 +618,17 @@ export function RunPage(props: RunPageProps) {
             <Badge color={mode === 'write' ? 'write' : 'info'}>{mode}</Badge>
             <Badge className="run-status-badge" color={previewHeld ? 'success' : actualStatus ? RUN_STATUS_TONE[actualStatus] : 'secondary'}>{stopping ? 'Menghentikan…' : previewHeld ? PREVIEW_GATE_LABEL : actualStatus ? RUN_STATUS_LABEL[actualStatus] : 'Belum mulai'}</Badge>
             {hasRunContext ? viewToggle('run-view-toggle') : null}
-            <div className="run-panel-toggles" role="group" aria-label="Panel visibility">
+            <div className="run-panel-toggles" role="group" aria-label="Panel">
               <span className="run-toggles-label" aria-hidden="true">Panels</span>
-              <button type="button" className={`run-toggle${layout.panels.setup.open ? ' is-on' : ''}`} aria-pressed={layout.panels.setup.open} title={layout.panels.setup.open ? 'Hide run setup' : 'Show run setup'} onClick={() => toggle('setup')}>Setup</button>
+              <button type="button" className={`run-toggle${layout.panels.setup.open ? ' is-on' : ''}`} aria-pressed={layout.panels.setup.open} title={layout.panels.setup.open ? 'Sembunyikan Setup' : 'Tampilkan Setup'} onClick={() => toggle('setup')}>Setup</button>
               {hasRunContext ? (
                 <>
-                  <button type="button" className={`run-toggle${inspectorOpen ? ' is-on' : ''}`} aria-pressed={inspectorOpen} title={inspectorOpen ? 'Hide inspector' : 'Show inspector'} onClick={() => toggle('inspector')}>Inspector</button>
-                  {view === 'canvas' ? <button type="button" className={`run-toggle${layout.panels.console.open ? ' is-on' : ''}`} aria-pressed={layout.panels.console.open} title={layout.panels.console.open ? 'Hide console' : 'Show console'} onClick={() => toggle('console')}>Console</button> : null}
+                  <button type="button" className={`run-toggle${inspectorOpen ? ' is-on' : ''}`} aria-pressed={inspectorOpen} title={inspectorOpen ? 'Sembunyikan Inspector' : 'Tampilkan Inspector'} onClick={() => toggle('inspector')}>Inspector</button>
+                  {view === 'canvas' ? <button type="button" className={`run-toggle${layout.panels.console.open ? ' is-on' : ''}`} aria-pressed={layout.panels.console.open} title={layout.panels.console.open ? 'Sembunyikan Console' : 'Tampilkan Console'} onClick={() => toggle('console')}>Console</button> : null}
                   <button type="button" className={`run-toggle${summaryEnabled ? ' is-on' : ''}`} aria-pressed={summaryEnabled} title={summaryEnabled ? 'Jangan tampilkan ringkasan saat run selesai' : 'Tampilkan ringkasan saat run selesai'} onClick={toggleSummary}>Ringkasan</button>
                 </>
               ) : null}
-              <button type="button" className="run-toggle run-reset-toggle" title="Reset panel positions, sizes and visibility" onClick={() => { persistLayout.current = true; setInspectorAutoOpen(false); setLayout(defaultPanelLayout(viewportOf(surface.current, commandBar.current))); resetSummary(); }}>Reset tata letak</button>
+              <button type="button" className="run-toggle run-reset-toggle" title="Kembalikan posisi, ukuran, dan tampilan panel" onClick={() => { persistLayout.current = true; setInspectorAutoOpen(false); setLayout(defaultPanelLayout(viewportOf(surface.current, commandBar.current))); resetSummary(); }}>Reset tata letak</button>
             </div>
           </div>
           {hasRunContext ? <div className="run-command-stop">{runStoppable ? pauseButton('sm') : null}{stopButton('sm')}</div> : null}
@@ -658,16 +658,16 @@ export function RunPage(props: RunPageProps) {
               {playback === 'replay' && eventCount > 0 ? (
                 <div className="replay-bar">
                   <button type="button" className="replay-play"
-                    aria-label={replayPlaying ? 'Pause replay' : cursor >= eventCount ? 'Replay from start' : 'Continue replay'}
-                    title={replayPlaying ? 'Pause' : cursor >= eventCount ? 'Replay from start' : 'Continue'}
+                    aria-label={replayPlaying ? 'Jeda' : cursor >= eventCount ? 'Putar dari awal' : 'Lanjutkan'}
+                    title={replayPlaying ? 'Pause' : cursor >= eventCount ? 'Putar dari awal' : 'Continue'}
                     onClick={() => (replayPlaying ? onPauseReplay() : onPlayReplay())}>
                     {replayPlaying ? '❚❚' : cursor >= eventCount ? '↻' : '►'}
                   </button>
-                  <label htmlFor="run-replay-range" className="visually-hidden">Replay position</label>
+                  <label htmlFor="run-replay-range" className="visually-hidden">Posisi putar ulang</label>
                   <input id="run-replay-range" type="range" min={0} max={eventCount} value={cursor}
-                    aria-valuetext={`Event ${cursor} of ${eventCount}`} aria-describedby="run-replay-range-description"
+                    aria-valuetext={`Event ${cursor}/${eventCount}`} aria-describedby="run-replay-range-description"
                     onChange={(event) => { onPauseReplay(); onSeek(Number(event.target.value)); }} />
-                  <span id="run-replay-range-description">Event {cursor} of {eventCount}</span>
+                  <span id="run-replay-range-description">Event {cursor}/{eventCount}</span>
                 </div>
               ) : null}
             </div>
@@ -676,7 +676,7 @@ export function RunPage(props: RunPageProps) {
           <div className="run-live-empty">
             <div className="run-live-empty-inner">
               <span className="page-eyebrow">Ready</span>
-              <h2>Configure a run to begin</h2>
+              <h2>Atur run di panel Setup untuk mulai</h2>
               <p>Set the workflow, scope, and execution mode in the setup panel, then start a preview. The live graph, inspector, and console appear here.</p>
             </div>
           </div>
@@ -684,7 +684,7 @@ export function RunPage(props: RunPageProps) {
       </section>
             {inspectorOpen ? (
               <aside ref={inspectorRef} className="run-inspector run-floating-panel" style={inspectorAutoOpen && !layout.panels.inspector.open ? { ...panelStyle('inspector'), zIndex: 13 } : panelStyle('inspector')} onPointerDown={() => { if (inspectorAutoOpen) return; raise('inspector'); }}>
-                <div className="run-panel-drag-zone nodrag nopan" role="button" tabIndex={0} aria-label="Move inspector panel; arrow keys move" onPointerDown={(event) => dragHeader('inspector', event)} onKeyDown={(event) => moveByKey('inspector', event)} />
+                <div className="run-panel-drag-zone nodrag nopan" role="button" tabIndex={0} aria-label="Geser panel Inspector; tombol panah untuk menggeser" onPointerDown={(event) => dragHeader('inspector', event)} onKeyDown={(event) => moveByKey('inspector', event)} />
                 <div className="run-panel-tools nodrag nopan"><FontScale name="inspector" label="Inspector" value={zoom.inspector} onChange={setZoomOf} /></div>
                 <NodeInspector onApproveGate={onApproveGate} onRejectGate={onRejectGate} onApproveMutation={onApproveMutation} onHide={() => toggle('inspector')} />
                 <PanelGrip label="inspector panel" onResize={(dir, dx, dy) => resizePanel('inspector', dir, dx, dy)} />
@@ -693,7 +693,7 @@ export function RunPage(props: RunPageProps) {
             {/* In log view the log is the main area; the console panel would only repeat it. */}
             {layout.panels.console.open && view === 'canvas' ? (
               <div className="run-console-dock run-floating-panel" style={panelStyle('console')} onPointerDown={() => raise('console')}>
-                <div className="run-panel-drag-zone nodrag nopan" role="button" tabIndex={0} aria-label="Move console panel; arrow keys move" onPointerDown={(event) => dragHeader('console', event)} onKeyDown={(event) => moveByKey('console', event)} />
+                <div className="run-panel-drag-zone nodrag nopan" role="button" tabIndex={0} aria-label="Geser panel Console; tombol panah untuk menggeser" onPointerDown={(event) => dragHeader('console', event)} onKeyDown={(event) => moveByKey('console', event)} />
                 <div className="run-panel-tools nodrag nopan"><FontScale name="console" label="Console" value={zoom.console} onChange={setZoomOf} /></div>
                 <RunConsole onHide={() => toggle('console')} />
                 <PanelGrip label="console panel" onResize={(dir, dx, dy) => resizePanel('console', dir, dx, dy)} />

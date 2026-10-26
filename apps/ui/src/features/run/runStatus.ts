@@ -35,7 +35,7 @@ export const RUN_STATUS_LABEL: Record<RunStatus, string> = {
 
 /** Cancelling a live run is not undoable, so the button arms before it fires. */
 export function cancelButtonLabel(armed: boolean): string {
-  return armed ? 'Klik lagi untuk stop' : 'Stop run';
+  return armed ? 'Klik lagi untuk menghentikan' : 'Hentikan';
 }
 
 const CURRENT_NODE_STATUSES = ['running', 'retrying', 'queued', 'gate_waiting', 'needs_review', 'failed', 'blocked'] as const;
@@ -184,3 +184,28 @@ export function durationLabel(ms: number): string {
 }
 
 export const TERMINAL_RUN_STATUSES: ReadonlyArray<RunStatus> = ['completed', 'failed', 'cancelled'];
+
+/**
+ * What the operator does next when a run stops at a node. The node's own summary
+ * says *what* is wrong; this says *what to do*. Steps not listed fall back to the
+ * generic advice.
+ */
+const NEXT_ACTION: Record<string, string> = {
+  normalize_input: 'Perbaiki No RM / tanggal di Setup, lalu mulai run lagi.',
+  normalize_ids: 'Perbaiki daftar No RM di Setup, lalu mulai run lagi.',
+  load_visits: 'Pastikan pasien punya kunjungan rawat inap pada tanggal itu di SIMRS.',
+  reject_verified: 'Transaksi sudah diverifikasi — tidak perlu diproses lagi. Jika SIMRS sedang lambat, jalankan ulang.',
+  reject_paid: 'Kunjungan sudah punya riwayat pembayaran — cek di menu Kasir. Jika SIMRS sedang lambat, jalankan ulang.',
+  validate_sep: 'Cek SEP pasien di menu Pendaftaran SIMRS (tanggal masuk dan PPK), perbaiki, lalu jalankan ulang.',
+  preverify_summary: 'Buka langkah bertanda kuning/merah sebelum ini, selesaikan di SIMRS, lalu jalankan ulang.',
+  check_balance: 'Bandingkan grand total kasir dengan rekapitulasi di SIMRS, rapikan selisihnya, lalu jalankan ulang.',
+  final_gate: 'Tinjau rencana di Inspector, lalu setujui atau tolak.',
+  resolve_clinics: 'Pilih poli yang dikenal di Setup, lalu mulai run lagi.',
+  load_history: 'Pastikan No RM benar dan pasien punya kunjungan rawat jalan pada tanggal itu.',
+  validate_exit_date: 'Isi tanggal keluar kunjungan di menu Poliklinik SIMRS, lalu jalankan ulang.',
+  check_verification: 'Selesaikan order yang belum terlayani / belum ditransfer di SIMRS, lalu jalankan ulang.',
+};
+
+export function nextActionOf(nodeId: string): string {
+  return NEXT_ACTION[nodeId] ?? 'Buka langkah ini di Inspector untuk detailnya; selesaikan di SIMRS lalu jalankan ulang.';
+}

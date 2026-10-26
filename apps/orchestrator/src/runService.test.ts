@@ -81,9 +81,9 @@ describe('RunService ledger failures', () => {
 
   it('does not hold a lock from a rejected run', async () => {
     const service = new RunService(new BrokenLedger('recordRun'));
-    await expect(service.createRun(writeRun)).rejects.toThrow(/Audit ledger unavailable/);
+    await expect(service.createRun(writeRun)).rejects.toThrow(/Jejak audit tidak bisa ditulis/);
     // A second attempt fails on the ledger again, never on a stale 409 lock.
-    await expect(service.createRun(writeRun)).rejects.toThrow(/Audit ledger unavailable/);
+    await expect(service.createRun(writeRun)).rejects.toThrow(/Jejak audit tidak bisa ditulis/);
   });
 
   it('survives append failures: the run finishes and the broken trail is reported', async () => {

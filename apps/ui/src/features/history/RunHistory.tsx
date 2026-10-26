@@ -44,10 +44,10 @@ const STATUS_LABEL: Record<RunSummary['status'], string> = { ...RUN_STATUS_LABEL
 /**
  * A preview that stopped only because preview holds the final gate (see
  * previewGateStopOf). The list has no node states, so this reads the run's
- * reason, which RunService words as `... blocked: Preview mode — gate held`.
+ * reason, which RunService words as `… Preview — gate ditahan …` (older ledgers: `Preview mode — gate held`).
  */
 export function isPreviewGateStop(run: Pick<RunSummary, 'mode' | 'status' | 'reason'>): boolean {
-  return run.mode === 'preview' && run.status === 'failed' && /Preview mode — gate held/.test(run.reason ?? '');
+  return run.mode === 'preview' && run.status === 'failed' && /Preview mode — gate held|Preview — gate ditahan/.test(run.reason ?? '');
 }
 
 export function runStatusLabel(run: Pick<RunSummary, 'mode' | 'status' | 'reason'>): string {
@@ -72,12 +72,12 @@ export function needsAttention(run: RunSummary): boolean {
 }
 
 export function runProvenanceLabel(run: RunSummary): string {
-  return run.source === 'ledger' ? 'Historical ledger' : 'In-memory run';
+  return run.source === 'ledger' ? 'Riwayat tersimpan' : 'In-memory run';
 }
 
 /** A disabled control has to say why; "Open" is disabled whenever a run has no replayable log. */
 export function openRunTitle(replayable: boolean): string {
-  return replayable ? 'Open this run on the canvas' : 'No replayable event log was recorded for this run';
+  return replayable ? 'Buka di kanvas' : 'Run ini tidak punya log event yang bisa diputar ulang';
 }
 
 export type RunFilter = 'all' | 'active' | 'attention' | 'completed' | 'failed';
@@ -157,7 +157,7 @@ export function RunHistory({ onOpenRun, onUnauthorized, workflowLabels = {} }: R
   return (
     <Card className="history-card">
       <CardHeader className="history-head">
-        <span>Run history</span>
+        <span>Riwayat run</span>
         <RefreshButton onRefresh={load} disabled={!loaded} title="Muat ulang daftar run" />
       </CardHeader>
       <CardBody>
@@ -227,7 +227,7 @@ export function RunHistory({ onOpenRun, onUnauthorized, workflowLabels = {} }: R
                           <Button color="info" variant="outline" size="sm" type="button" disabled={!run.replayable} title={openRunTitle(run.replayable)} onClick={() => onOpenRun(run)}>
                             {ACTIVE_STATUSES.has(run.status) ? 'Pantau' : 'Open'}
                           </Button>
-                          <a className="btn btn-outline-secondary btn-sm" href={api.exportRunUrl(run.runId)} title="Download the redacted JSONL audit trail" download onClick={() => toast('info', `Mengunduh audit trail · ${run.runId}`)}>
+                          <a className="btn btn-outline-secondary btn-sm" href={api.exportRunUrl(run.runId)} title="Unduh jejak audit (JSONL)" download onClick={() => toast('info', `Mengunduh audit trail · ${run.runId}`)}>
                             Export
                           </a>
                         </div>

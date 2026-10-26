@@ -62,7 +62,7 @@ const NODE_SPECS: NodeSpec[] = [
   // before validate_sep: the runner takes ready nodes in declaration order and
   // stops at the first critical block, which must not swallow the notice.
   ['check_berkas', 'Kelengkapan Berkas', 'penunjang', 'validate', false, 'stage-4', 'Mencari dokumen wajib klaim di berkas e-klaim (OCR untuk foto)'],
-  ['validate_sep', 'Validasi SEP', 'sep', 'validate', true, 'stage-5', 'Mencocokkan SEP dan merencanakan koreksi bila diperlukan'],
+  ['validate_sep', 'Cek SEP', 'sep', 'validate', true, 'stage-5', 'Mencocokkan SEP dan merencanakan koreksi bila diperlukan'],
   ['check_payment', 'Cek Status Pembayaran', 'payment', 'read', true, 'stage-6', 'Memeriksa tagihan yang masih belum dibayar'],
   ['check_verification', 'Cek Order & Verifikasi', 'payment', 'validate', false, 'stage-6', 'Memeriksa order belum terlayani/transfer, penunjang, dan verifikasi'],
   ['submit_payment', 'Tampung Bayar', 'payment', 'mutate', true, 'stage-7', 'Merencanakan pembayaran setelah seluruh syarat terpenuhi', 'critical'],

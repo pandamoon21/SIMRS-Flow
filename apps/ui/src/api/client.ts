@@ -410,10 +410,10 @@ export const api = {
         // but keep trying instead of going permanently silent.
         source?.close();
         source = undefined;
-        if (attempts === 0) onError?.(new Error('SSE connection lost — reconnecting…'));
+        if (attempts === 0) onError?.(new Error('Koneksi ke orchestrator terputus — menyambung ulang…'));
         if (attempts >= MAX_ATTEMPTS) {
           close();
-          onError?.(new Error('SSE connection failed after several attempts — check the orchestrator'));
+          onError?.(new Error('Koneksi ke orchestrator gagal setelah beberapa percobaan — cek orchestrator'));
           return;
         }
         const delay = Math.min(1000 * 2 ** attempts, 15000);

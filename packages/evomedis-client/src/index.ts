@@ -7,6 +7,7 @@
 export {
   ENDPOINTS,
   getEndpoint,
+  endpointLabel,
   mutatingEndpointIds,
   isMutating,
 } from './endpoints.js';

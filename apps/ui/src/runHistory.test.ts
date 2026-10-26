@@ -39,12 +39,12 @@ describe('splitRuns', () => {
   });
 
   it('explains a disabled open button rather than leaving a dead control', () => {
-    expect(openRunTitle(false)).toMatch(/no replayable event log/i);
+    expect(openRunTitle(false)).toMatch(/tidak punya log event/i);
     expect(openRunTitle(true)).not.toMatch(/no replayable/i);
   });
 
   it('labels storage provenance without inventing execution source', () => {
-    expect(runProvenanceLabel(run('completed'))).toBe('Historical ledger');
+    expect(runProvenanceLabel(run('completed'))).toBe('Riwayat tersimpan');
     expect(runProvenanceLabel({ ...run('running'), source: 'memory' })).toBe('In-memory run');
   });
 });

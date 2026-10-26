@@ -31,6 +31,8 @@ export interface EndpointDef {
   requiresApproval?: boolean;
   /** Human description for the catalog / inspector. */
   description: string;
+  /** Operator-facing name of a write (Indonesian), used in run messages. */
+  label?: string;
 }
 
 /**
@@ -186,6 +188,7 @@ export const ENDPOINTS = {
   // ── Kasir — writes (critical, financial) ────────────────────────
   'kasir.tampungBayar': {
     id: 'kasir.tampungBayar',
+    label: 'Tampung bayar',
     api: 'v1',
     method: 'POST',
     path: 'kasir/kasir/tampung_bayar',
@@ -197,6 +200,7 @@ export const ENDPOINTS = {
   },
   'kasir.updateTglMasuk': {
     id: 'kasir.updateTglMasuk',
+    label: 'Ubah tanggal masuk',
     api: 'v1',
     method: 'POST',
     path: 'kasir/kasir/update_tgl_masuk',
@@ -208,6 +212,7 @@ export const ENDPOINTS = {
   },
   'kasir.updateTgl': {
     id: 'kasir.updateTgl',
+    label: 'Ubah tanggal transaksi',
     api: 'v1',
     method: 'POST',
     path: 'kasir/kasir/update_tgl',
@@ -261,6 +266,7 @@ export const ENDPOINTS = {
   },
   'rekamMedis.simpanSep': {
     id: 'rekamMedis.simpanSep',
+    label: 'Simpan koreksi SEP',
     api: 'v1',
     method: 'POST',
     path: 'rekam_medis/upload_berkas/simpanSEP',
@@ -508,6 +514,7 @@ export const ENDPOINTS = {
   // ── Poliklinik / IGD — writes ───────────────────────────────────
   'poliklinik.batalKirimOk': {
     id: 'poliklinik.batalKirimOk',
+    label: 'Batalkan kirim order OK',
     api: 'v1',
     method: 'POST',
     path: 'poliklinik/poliklinik/batal_kirim_ok',
@@ -519,6 +526,7 @@ export const ENDPOINTS = {
   },
   'poliklinik.batalTransfer': {
     id: 'poliklinik.batalTransfer',
+    label: 'Batalkan transfer tagihan poli/IGD',
     api: 'v1',
     method: 'POST',
     path: 'poliklinik/poliklinik/batal_transfer',
@@ -530,6 +538,7 @@ export const ENDPOINTS = {
   },
   'poliklinik.hapusTindakan': {
     id: 'poliklinik.hapusTindakan',
+    label: 'Hapus tindakan poli/IGD',
     api: 'v1',
     method: 'POST',
     path: 'poliklinik/poliklinik/hapus_tindakan',
@@ -542,6 +551,7 @@ export const ENDPOINTS = {
   },
   'poliklinik.tambahTindakanPolis': {
     id: 'poliklinik.tambahTindakanPolis',
+    label: 'Tambah tindakan poli/IGD',
     api: 'v1',
     method: 'POST',
     path: 'poliklinik/poliklinik/tambah_tindakan_polis',
@@ -554,6 +564,7 @@ export const ENDPOINTS = {
   },
   'poliklinik.tampungPelaksana': {
     id: 'poliklinik.tampungPelaksana',
+    label: 'Atur pelaksana tindakan',
     api: 'v1',
     method: 'POST',
     path: 'poliklinik/poliklinik/tampung_pelaksana',
@@ -566,6 +577,7 @@ export const ENDPOINTS = {
   },
   'poliklinik.transferIgd': {
     id: 'poliklinik.transferIgd',
+    label: 'Transfer tagihan IGD',
     api: 'v1',
     method: 'POST',
     path: 'poliklinik/poliklinik/transfer_igd',
@@ -578,6 +590,7 @@ export const ENDPOINTS = {
   },
   'poliklinik.updateTgl': {
     id: 'poliklinik.updateTgl',
+    label: 'Ubah tanggal tindakan poli/IGD',
     api: 'v1',
     method: 'POST',
     path: 'poliklinik/poliklinik/update_tgl',
@@ -832,6 +845,7 @@ export const ENDPOINTS = {
   // ── Penatajasa inap — writes ────────────────────────────────────
   'penatajasaInap.batalKirimOrderGizi': {
     id: 'penatajasaInap.batalKirimOrderGizi',
+    label: 'Batalkan kirim order gizi',
     api: 'v1',
     method: 'POST',
     path: 'poliklinik/penatajasa_inap/batalkirim_ordergizi',
@@ -843,6 +857,7 @@ export const ENDPOINTS = {
   },
   'penatajasaInap.hapusDetailOrderGizi': {
     id: 'penatajasaInap.hapusDetailOrderGizi',
+    label: 'Hapus baris order gizi',
     api: 'v1',
     method: 'POST',
     path: 'poliklinik/penatajasa_inap/hapus_detailordergizi',
@@ -854,6 +869,7 @@ export const ENDPOINTS = {
   },
   'penatajasaInap.hapusOrderOk': {
     id: 'penatajasaInap.hapusOrderOk',
+    label: 'Hapus order OK',
     api: 'v1',
     method: 'POST',
     path: 'poliklinik/penatajasa_inap/hapus_order_ok',
@@ -865,6 +881,7 @@ export const ENDPOINTS = {
   },
   'penatajasaInap.hapusTindakan': {
     id: 'penatajasaInap.hapusTindakan',
+    label: 'Hapus tindakan rawat inap',
     api: 'v1',
     method: 'POST',
     path: 'poliklinik/penatajasa_inap/hapus_tindakan',
@@ -877,6 +894,7 @@ export const ENDPOINTS = {
   },
   'penatajasaInap.kirimOrderGizi': {
     id: 'penatajasaInap.kirimOrderGizi',
+    label: 'Kirim order gizi',
     api: 'v1',
     method: 'POST',
     path: 'poliklinik/penatajasa_inap/kirim_ordergizi',
@@ -888,6 +906,7 @@ export const ENDPOINTS = {
   },
   'penatajasaInap.tambahTindakanPolis': {
     id: 'penatajasaInap.tambahTindakanPolis',
+    label: 'Tambah tindakan rawat inap',
     api: 'v1',
     method: 'POST',
     path: 'poliklinik/penatajasa_inap/tambah_tindakan_polis',
@@ -900,6 +919,7 @@ export const ENDPOINTS = {
   },
   'penatajasaInap.updateTgl': {
     id: 'penatajasaInap.updateTgl',
+    label: 'Ubah tanggal tindakan rawat inap',
     api: 'v1',
     method: 'POST',
     path: 'poliklinik/penatajasa_inap/update_tgl',
@@ -1064,6 +1084,7 @@ export const ENDPOINTS = {
   // ── Verifikator — writes (critical finalization) ────────────────
   'verifikator.simpanVerifikasi': {
     id: 'verifikator.simpanVerifikasi',
+    label: 'Simpan verifikasi',
     api: 'v1',
     method: 'POST',
     path: 'poliklinik/verifikator/simpan_verifikasi',
@@ -1075,6 +1096,7 @@ export const ENDPOINTS = {
   },
   'verifikator.batalVerifikasi': {
     id: 'verifikator.batalVerifikasi',
+    label: 'Batalkan verifikasi',
     api: 'v1',
     method: 'POST',
     path: 'poliklinik/verifikator/batal_verifikasi',
@@ -1086,6 +1108,7 @@ export const ENDPOINTS = {
   },
   'verifikator.bukaBhp': {
     id: 'verifikator.bukaBhp',
+    label: 'Buka BHP',
     api: 'v1',
     method: 'POST',
     path: 'poliklinik/verifikator/buka_bhp',
@@ -1097,6 +1120,7 @@ export const ENDPOINTS = {
   },
   'verifikator.hapusTindakan': {
     id: 'verifikator.hapusTindakan',
+    label: 'Hapus tindakan (verifikator)',
     api: 'v1',
     method: 'POST',
     path: 'poliklinik/verifikator/hapus_tindakan',
@@ -1109,6 +1133,7 @@ export const ENDPOINTS = {
   },
   'verifikator.tambahTindakanPolis': {
     id: 'verifikator.tambahTindakanPolis',
+    label: 'Tambah tindakan (verifikator)',
     api: 'v1',
     method: 'POST',
     path: 'poliklinik/verifikator/tambah_tindakan_polis',
@@ -1237,6 +1262,7 @@ export const ENDPOINTS = {
   // ── Laboratorium — registrasi pemeriksaan (writes) ──────────────
   'laboratorium.batalTransfer': {
     id: 'laboratorium.batalTransfer',
+    label: 'Batalkan transfer lab',
     api: 'v1',
     method: 'POST',
     path: 'laboratorium/registrasi_pemeriksaan/batal_transfer',
@@ -1248,6 +1274,7 @@ export const ENDPOINTS = {
   },
   'laboratorium.bukaBhp': {
     id: 'laboratorium.bukaBhp',
+    label: 'Buka BHP lab',
     api: 'v1',
     method: 'POST',
     path: 'laboratorium/registrasi_pemeriksaan/buka_bhp',
@@ -1259,6 +1286,7 @@ export const ENDPOINTS = {
   },
   'laboratorium.transferLab': {
     id: 'laboratorium.transferLab',
+    label: 'Transfer tagihan lab',
     api: 'v1',
     method: 'POST',
     path: 'laboratorium/registrasi_pemeriksaan/transfer_lab',
@@ -1271,6 +1299,7 @@ export const ENDPOINTS = {
   },
   'laboratorium.tutupBhp': {
     id: 'laboratorium.tutupBhp',
+    label: 'Tutup BHP lab',
     api: 'v1',
     method: 'POST',
     path: 'laboratorium/registrasi_pemeriksaan/tutup_bhp',
@@ -1482,6 +1511,7 @@ export const ENDPOINTS = {
   },
   'elektromedik.transferTagihan': {
     id: 'elektromedik.transferTagihan',
+    label: 'Transfer tagihan elektromedik',
     api: 'v1',
     method: 'POST',
     path: 'elektromedik/registrasi_pemeriksaan/transferTagihan',
@@ -1494,6 +1524,7 @@ export const ENDPOINTS = {
   },
   'elektromedik.batalTransfer': {
     id: 'elektromedik.batalTransfer',
+    label: 'Batalkan transfer elektromedik',
     api: 'v1',
     method: 'POST',
     path: 'elektromedik/registrasi_pemeriksaan/batalTransfer',
@@ -1620,6 +1651,11 @@ export function mutatingEndpointIds(): string[] {
   return Object.values(ENDPOINTS)
     .filter((e) => e.kind === 'mutate')
     .map((e) => e.id);
+}
+
+/** Operator-facing name of an endpoint: its label, else the id. */
+export function endpointLabel(id: string): string {
+  return getEndpoint(id)?.label ?? id;
 }
 
 /** Is this id a known mutating endpoint? */

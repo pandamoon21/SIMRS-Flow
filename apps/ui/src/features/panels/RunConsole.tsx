@@ -88,14 +88,14 @@ export function RunConsole({ onHide }: RunConsoleProps) {
           <FormCheck
             id="console-problems"
             label="Problems only"
-            title="Show only warnings and errors"
+            title="Hanya peringatan dan error"
             checked={problemsOnly}
             onChange={(c) => setProblemsOnly(c)}
           />
           <FormCheck
             id="console-debug"
             label="Debug"
-            title="Also show debug lines: no reg, no trx, SEP source, gizi preflight"
+            title="Tampilkan juga baris debug: no reg, no trx, sumber SEP, preflight gizi"
             checked={debugMode}
             onChange={(c) => setDebugMode(c)}
           />
@@ -107,12 +107,12 @@ export function RunConsole({ onHide }: RunConsoleProps) {
       <CardBody className="console-body">
         <div className="console-summary">
           {progress.total > 0 ? (
-            <span className="console-progress" title="Steps that reached a terminal state">
+            <span className="console-progress" title="Langkah yang sudah selesai">
               <strong>{progress.done}</strong>/{progress.total} steps
             </span>
           ) : null}
           {totalMs > 0 ? (
-            <span className="console-duration" title="Total step time">◷ {durationLabel}</span>
+            <span className="console-duration" title="Total waktu langkah">◷ {durationLabel}</span>
           ) : null}
           {counts.map(({ status, count }) => (
             <span className="console-stat" data-status={status} key={status}>
@@ -131,7 +131,7 @@ export function RunConsole({ onHide }: RunConsoleProps) {
             {groups.length === 0 ? (
               <div className="empty">
                 {problemsOnly && logs.length > 0
-                  ? 'No warnings or errors so far.'
+                  ? 'Belum ada peringatan atau error.'
                   : 'No logs yet. Start a run or wait for the next event.'}
               </div>
             ) : (

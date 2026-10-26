@@ -202,7 +202,7 @@ describe('UI api client — auth', () => {
       // the old behaviour closed the stream for good here.
       first.onerror?.(new Event('error'));
       expect(first.closed).toBe(true);
-      expect(errors).toEqual(['SSE connection lost — reconnecting…']);
+      expect(errors).toEqual(['Koneksi ke orchestrator terputus — menyambung ulang…']);
       expect(eventSources).toHaveLength(1);
 
       // The backoff timer fires and a fresh EventSource is opened. Its replayed
@@ -228,7 +228,7 @@ describe('UI api client — auth', () => {
         source.onerror?.(new Event('error'));
         vi.advanceTimersByTime(20000);
       }
-      expect(errors[errors.length - 1]).toBe('SSE connection failed after several attempts — check the orchestrator');
+      expect(errors[errors.length - 1]).toBe('Koneksi ke orchestrator gagal setelah beberapa percobaan — cek orchestrator');
     } finally {
       vi.useRealTimers();
     }

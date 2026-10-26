@@ -84,3 +84,12 @@ export class TransactionLocks {
     return this.held.has(key);
   }
 }
+
+/** Operator-facing name of a lock key (`tx:…`, `ranap-rm:RM:date`, `rajal-rm:RM:date`). */
+export function lockKeyLabel(key: string): string {
+  const [kind, id = '', date = ''] = key.split(':');
+  if (kind === 'tx') return `transaksi ${id}`;
+  if (kind === 'rajal-discovery') return 'pengambilan laporan rajal';
+  if (kind === 'ranap-rm' || kind === 'rajal-rm') return `No RM ${id}${date && date !== '*' ? ` (${date})` : ''}`;
+  return key;
+}

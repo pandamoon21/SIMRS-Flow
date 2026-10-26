@@ -2337,7 +2337,7 @@ const RAJAL_CHECKLISTS: Record<string, ChecklistBuilder> = {
       { label: 'No RM diisi', ok: Boolean(input.patientIds?.length), detail: `${input.patientIds?.length ?? 0} pasien` },
       { label: 'Poli dipilih', ok: Boolean(input.clinics?.length), detail: input.clinics?.join(', ') || 'kosong' },
       { label: 'Penjamin diterima', ok: null, detail: (input.acceptedPenjaminKeywords ?? ACCEPTED_DEFAULT).join(', ') },
-      { label: 'Validasi SEP', ok: null, detail: input.sepCheckRequired === false ? 'dinonaktifkan' : 'aktif' },
+      { label: 'Cek SEP', ok: null, detail: input.sepCheckRequired === false ? 'dinonaktifkan' : 'aktif' },
     ] };
   },
   normalizeIds: ({ ctx, result }) => {

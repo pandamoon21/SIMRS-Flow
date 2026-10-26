@@ -771,7 +771,7 @@ export function RunInputForm({ domain, source, onInputChange, viewingRunId }: Ru
   }, [rajal]);
 
   const title = domain === 'ranap' ? 'Input Rawat Inap' : 'Input Rawat Jalan';
-  const hint = source === 'live' ? 'Used for a live SIMRS run' : 'Used only to describe the fixture replay';
+  const hint = source === 'live' ? 'Dipakai untuk run SIMRS langsung' : 'Hanya keterangan untuk data contoh';
   const discovering = domain === 'rajal' && rajal.mode === 'discover';
 
   return (

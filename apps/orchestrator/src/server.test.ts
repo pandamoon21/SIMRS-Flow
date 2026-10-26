@@ -500,7 +500,7 @@ describe('orchestrator API — write-mode security', () => {
       AUTH,
     );
     expect(second.status).toBe(409);
-    expect(second.body.error).toMatch(/locked/i);
+    expect(second.body.error).toContain('No RM 012345 (2026-06-10) sedang dikerjakan run lain');
   });
 
   it('logout invalidates the token', async () => {

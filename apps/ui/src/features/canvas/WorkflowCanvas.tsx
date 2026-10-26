@@ -465,7 +465,7 @@ export function WorkflowCanvas({ onReviewNode, onSelectExecutableNode }: Workflo
   const animated = useAnimatedGraph(nodes, edges, `${prefs.mode}:${direction}:${prefs.fold}`);
 
   if (!definition) {
-    return <div className="empty">Pick a workflow and start a run to see the canvas.</div>;
+    return <div className="empty">Pilih alur lalu mulai run untuk melihat kanvas.</div>;
   }
 
   return (
@@ -497,7 +497,7 @@ export function WorkflowCanvas({ onReviewNode, onSelectExecutableNode }: Workflo
       className={flex ? `is-flex is-flex-${direction}` : 'is-fixed'}
     >
       <Panel position="top-right" className="canvas-helper-panel">
-        <ButtonGroup size="sm" role="group" aria-label="Canvas view controls">
+        <ButtonGroup size="sm" role="group" aria-label="Kontrol tampilan kanvas">
           <Button color="secondary" variant="outline" type="button" title="Ke langkah pertama alur" onClick={() => { cameraTouched.current = true; const first = definition.nodes[0]; if (first) focusStep(first.id); }}>Awal</Button>
           <Button color="secondary" variant="outline" type="button" disabled={!runReached} title={runReached ? 'Ke langkah yang sedang berjalan / menunggu, atau yang terakhir dicapai run' : 'Belum ada langkah yang berjalan — sama dengan Awal'} onClick={() => { cameraTouched.current = true; centerActive(); }}>Saat ini</Button>
         </ButtonGroup>
@@ -506,10 +506,10 @@ export function WorkflowCanvas({ onReviewNode, onSelectExecutableNode }: Workflo
           <Button color="secondary" variant="outline" type="button" disabled={problemIds.length === 0} title={problemIds.length ? `Langkah gagal / perlu tinjauan / menunggu gate (${problemIds.length}) · klik untuk berikutnya` : 'Belum ada langkah bermasalah'} onClick={() => { cameraTouched.current = true; showProblem(1); }}>Issues {problemPosition}</Button>
           <Button color="secondary" variant="outline" type="button" disabled={problemIds.length === 0} aria-label="Masalah berikutnya" title="Langkah bermasalah berikutnya" onClick={() => { cameraTouched.current = true; showProblem(1); }}>›</Button>
         </ButtonGroup>
-        <ButtonGroup size="sm" role="group" aria-label="Canvas view">
+        <ButtonGroup size="sm" role="group" aria-label="Tampilan kanvas">
           <Button color="secondary" variant="outline" type="button" title="Ke langkah terakhir alur" onClick={() => { cameraTouched.current = true; const last = definition.nodes[definition.nodes.length - 1]; if (last) focusStep(last.id); }}>Akhir</Button>
           <Button color="secondary" variant="outline" type="button" title="Fit untuk seluruh alur · klik kartu untuk detail" onClick={() => { cameraTouched.current = true; fitToDisplay(); }}>Fit</Button>
-          <Button color="secondary" variant="outline" type="button" onClick={() => { cameraTouched.current = true; if (selectedNodeId) focusStep(selectedNodeId, { minZoom: 0.9 }); }} disabled={!selectedNodeId} title={selectedNodeId ? 'Centre the selected node' : 'Select a node first'}>Selected</Button>
+          <Button color="secondary" variant="outline" type="button" onClick={() => { cameraTouched.current = true; if (selectedNodeId) focusStep(selectedNodeId, { minZoom: 0.9 }); }} disabled={!selectedNodeId} title={selectedNodeId ? 'Ke node yang dipilih' : 'Pilih node dulu'}>Selected</Button>
           <Button color={followActive ? 'info' : 'secondary'} variant={followActive ? undefined : 'outline'} type="button" aria-pressed={followActive} title={followActive ? 'Auto-follow the running node (on)' : 'Auto-follow the running node (off)'} onClick={() => { markCameraTouched(); setFollowActive((v) => !v); }}>Follow</Button>
         </ButtonGroup>
         <ButtonGroup size="sm" role="group" aria-label="Tata letak kanvas">
