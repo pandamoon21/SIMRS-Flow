@@ -57,7 +57,7 @@ const TIMEOUT_S = Number(args.timeout ?? 900);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function runInput() {
-  if (domain === 'ranap') return { noRm: '012345', tanggal: '2026-06-10', ...(args.verifikasi === 'false' ? { enableVerifikasi: false } : {}) };
+  if (domain === 'ranap') return { noRm: '012345', tanggal: '2026-06-10' };
   const ids = patients > 1
     ? Array.from({ length: patients }, (_, i) => `0-8${Math.floor(i / 10000)}-${String(Math.floor(i / 100) % 100).padStart(2, '0')}-${String(i % 100).padStart(2, '0')}`)
     : ['012345'];
@@ -145,7 +145,7 @@ const created = await evaluate(`(async () => {
   const token = localStorage.getItem('simrs-flow.token') ?? sessionStorage.getItem('simrs-flow.token');
   const res = await fetch('/api/runs', { method: 'POST', credentials: 'include',
     headers: { 'content-type': 'application/json', ...(token ? { authorization: 'Bearer ' + token } : {}) },
-    body: JSON.stringify(${JSON.stringify({ workflowId: domain === 'ranap' ? 'ranap-verifikasi-tampung-bayar' : 'rajal-patient-processor', mode, source: 'fixture', input: runInput(), qa, ...(mode === 'write' ? { autoApprove: true } : {}) })}) });
+    body: JSON.stringify(${JSON.stringify({ workflowId: domain === 'ranap' ? 'ranap-verifikasi-tampung-bayar' : 'rajal-patient-processor', mode, source: 'fixture', input: runInput(), qa, ...(domain === 'ranap' && args.verifikasi === 'false' ? { enabled: { final_gate: false, execute_verifikasi: false, tampung_bayar: false } } : {}), ...(mode === 'write' ? { autoApprove: true } : {}) })}) });
   return { status: res.status, body: await res.json() };
 })()`);
 if (created.status !== 201) { console.error('FAIL: create run', JSON.stringify(created)); process.exit(1); }
