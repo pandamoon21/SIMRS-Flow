@@ -178,6 +178,8 @@ for (let s = 0; s < TIMEOUT_S; s++) {
   // Lag counts only once the canvas shows progress; before that the page is still loading.
   samples.push({ t: s, ui: ui.done, server: server.done, lag: ui.moving ? (server.done ?? 0) - ui.done : 0, ...mem });
   status = ui.badge;
+  // Operator presses F5 mid-run: the page must pick the run back up.
+  if (args['reload-at'] && s === Number(args['reload-at'])) { await send('Page.reload'); await sleep(1500); }
   // Interact like an operator every ~6 s while it runs.
   if (s % 6 === 3) {
     for (const p of ['^Log$', '^Kanvas$', '^Inspector$', '^Inspector$']) { const ms = await timedClick(p); if (ms !== null) clicks.push({ p, ms }); }
@@ -211,6 +213,13 @@ const finalUi = await evaluate(`({
   attention: document.querySelector('.run-command-lead')?.textContent.trim().slice(0, 200) ?? '',
   error: [...document.querySelectorAll('[role=alert], .run-error-alert')].map((x) => x.textContent.trim()).join(' | ').slice(0, 300),
   overflowX: document.scrollingElement.scrollWidth - innerWidth,
+  nodes: [...document.querySelectorAll('[data-testid=wf-node]')].map((el) => {
+    const status = ([...el.classList].find((c) => c.startsWith('status-')) ?? '').slice(7);
+    const label = (el.getAttribute('aria-label') ?? '').split(' — ')[0];
+    const summary = (el.getAttribute('aria-label') ?? '').split(' — ').slice(1).join(' — ').slice(0, 200);
+    return { label, status, summary };
+  }),
+  summaryPanel: document.querySelector('.run-summary')?.innerText.replace(/\\s+/g, ' ').slice(0, 400) ?? '',
 })`);
 const pct = (xs, p) => { const s = [...xs].sort((a, b) => a - b); return s.length ? s[Math.min(s.length - 1, Math.floor(p * s.length))] : 0; };
 const report = {
