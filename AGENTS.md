@@ -177,3 +177,16 @@ node --import tsx scripts/pilot-live-write.ts                              # gua
 ## Commit & Pull Request Guidelines
 
 Conventional Commit subjects, imperative and specific (e.g. `fix: accept evomedis root base url`). PRs should include a short summary, linked issue/context, the validation commands you ran, and screenshots or logs for UI/API behavior changes; call out any `.env` additions and never commit credentials, session data, production URLs, or patient data. Treat changes to the mutation gate, allowlist, ledger, and redaction as security-sensitive.
+
+No AI attribution: no `Co-Authored-By: Claude …` trailer in commits and no "Generated with Claude Code" line in PR bodies.
+
+## Public Repository
+
+The code is published at **`pandamoon21/SIMRS-Flow`** (public, PolyForm Noncommercial 1.0.0, see `LICENSE`). `pandamoon21/PKUAP` stays private: it keeps the full history, which still contains the SIMRS LAN address, the naik kelas Sheet ID and old QA screenshots, so never push PKUAP history to the public repo or make PKUAP public.
+
+- SIMRS-Flow started as a one-commit snapshot of PKUAP `11c9885`; the histories are unrelated. Carry a change across with a patch, not a merge: `git format-patch -1 <sha> --stdout > x.patch`, then `git am x.patch` in a SIMRS-Flow clone, on a branch, via PR.
+- **Site values live only in env**, never in source, tests, docs or fixtures: `EVOMEDIS_BASE_URL`, `NAIK_KELAS_SHEET_URL` (plus secrets already listed under Important Files). Real values go in the gitignored `.env` and `scripts/portable/config.local.env` (the portable build prefers it over the public `config.env` template).
+- **Synthetic data only** in tests, docs and UI placeholders: No RM like `0-12-34-56` / `0-90-00-0x`, names like `PASIEN SATU`, hosts like `simrs.example.local` / `simrs.invalid`. Do not paste values from live runs (No RM, names, `no_transaksi`, SEP numbers, LIS links) — rewrite them first.
+- `.omo/`, `.data/`, `.env` are gitignored; keep agent evidence and screenshots there, not in tracked paths.
+- Before pushing to SIMRS-Flow, grep the diff for private IPs, `docs.google.com/spreadsheets/d/`, real-looking No RMs and local user paths (`C:\Users\…`).
+- CI runs on SIMRS-Flow (public runners). PKUAP PRs currently get no CI runs, so run `npm run typecheck && npm run lint && npm test && bash scripts/livetest.sh` locally before merging there.
