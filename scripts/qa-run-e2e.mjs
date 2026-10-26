@@ -130,7 +130,7 @@ await send('Page.addScriptToEvaluateOnNewDocument', { source: `
 // ── Login (QA) ──
 await send('Page.navigate', { url: APP });
 await sleep(2000);
-await evaluate(`(${theme === 'light'} ? localStorage.removeItem('simrs-flow-theme') : localStorage.setItem('simrs-flow-theme','dark')), localStorage.removeItem('simrs-flow.run.panels.v1'), 'ok'`);
+await evaluate(`(${theme === 'light'} ? localStorage.removeItem('simrs-flow-theme') : localStorage.setItem('simrs-flow-theme','dark')), localStorage.removeItem('simrs-flow.run.panels.v1'), ${JSON.stringify(args.motion ?? '')} ? localStorage.setItem('simrs-flow.motion', ${JSON.stringify(args.motion ?? '')}) : localStorage.removeItem('simrs-flow.motion'), 'ok'`);
 const qaButton = await evaluate(`(() => { const b = [...document.querySelectorAll('button')].find((x) => /^Masuk QA/i.test(x.textContent.trim())); b?.click(); return Boolean(b); })()`);
 if (!qaButton) {
   // Production bundle (no QA button): sign in through the QA endpoint, which exists only on a QA host.

@@ -23,6 +23,7 @@ import { ReviewQueue } from '../features/review/ReviewQueue.js';
 import { SettingsHealth } from '../features/settings/SettingsHealth.js';
 import { Card, CardBody, Spinner } from '../ui/primitives.js';
 import { toast, ToastHost } from '../ui/toast.js';
+import { reducedMotion } from '../ui/motion.js';
 
 const WORKFLOWS: Record<string, WorkflowDefinition> = {
   [ranapWorkflow.id]: ranapWorkflow,
@@ -73,11 +74,8 @@ export function App() {
   const [entering, setEntering] = useState(false);
   const handleLoggedIn = useCallback((op: string) => {
     setOperator(op);
-    setEntering(shouldShowWelcome(
-      typeof window === 'undefined' || typeof window.matchMedia !== 'function'
-        ? true
-        : window.matchMedia('(prefers-reduced-motion: reduce)').matches,
-    ));
+    // The welcome curtains are pure decoration: skipped unless motion is full.
+    setEntering(shouldShowWelcome(reducedMotion() || document.documentElement.dataset.motion === 'lite'));
   }, []);
   useEffect(() => {
     if (!entering || !operator) return;

@@ -2434,3 +2434,17 @@ html[data-vt='theme']::view-transition-new(root) {
   .run-meta-bar > i[data-indeterminate] { animation: meta-bar-slide 1.1s ease-in-out infinite; }
   @keyframes meta-bar-slide { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
 }
+
+/* ── Motion setting (Settings → Animasi; ui/motion.ts sets html[data-motion]) ──
+   lite: drop the decorative loops that keep running during a run — skyline and
+   decor strip, the command-bar run track, breathing/pulsing status dots. Status
+   colours, edges, progress and spinners stay. off: no motion at all. */
+html[data-motion='lite'] .decor-strip *,
+html[data-motion='lite'] .skyline *,
+html[data-motion='lite'] .run-track *,
+html[data-motion='lite'] .wf-node .dot,
+html[data-motion='lite'] .wf-compact-dot,
+html[data-motion='lite'] .login-host-dot { animation: none !important; }
+html[data-motion='off'] *,
+html[data-motion='off'] *::before,
+html[data-motion='off'] *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }

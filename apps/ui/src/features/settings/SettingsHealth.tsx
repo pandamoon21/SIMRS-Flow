@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { api, API_BASE, UnauthorizedError, type HealthSummary, type WorkflowSummary } from '../../api/client.js';
 import { fetchNaikKelas, type NaikKelasStatus } from '../naikKelas/naikKelas.js';
-import { Alert, Badge, Card, CardBody, CardHeader, Col, RefreshButton, Row, Spinner, Table, TableBody, TableDataCell, TableHead, TableHeaderCell, TableRow } from '../../ui/primitives.js';
+import { readMotionSetting, saveMotionSetting, type MotionSetting } from '../../ui/motion.js';
+import { Alert, Badge, Button, ButtonGroup, Card, CardBody, CardHeader, Col, RefreshButton, Row, Spinner, Table, TableBody, TableDataCell, TableHead, TableHeaderCell, TableRow } from '../../ui/primitives.js';
 
 /** A value an operator may need to type elsewhere (URL, path): one click copies it. */
 function CopyValue({ value, children }: { value: string; children?: ReactNode }) {
@@ -77,6 +78,34 @@ export function storageRows(health: HealthSummary | undefined, naik: NaikKelasSt
 
 const yesNo = (value: boolean | undefined, yes: string, no: string, tone: 'success' | 'warning' | 'danger' = 'success') =>
   <Badge color={value ? tone : 'secondary'}>{value ? yes : no}</Badge>;
+
+const MOTION_OPTIONS: { value: MotionSetting; label: string; hint: string }[] = [
+  { value: 'auto', label: 'Otomatis', hint: 'Hemat di PC lemah (RAM ≤ 4 GB / ≤ 4 core) atau saat layar tersendat' },
+  { value: 'full', label: 'Penuh', hint: 'Semua animasi' },
+  { value: 'lite', label: 'Hemat', hint: 'Tanpa animasi dekoratif yang terus berjalan; status dan progress tetap' },
+  { value: 'off', label: 'Mati', hint: 'Tanpa gerak sama sekali' },
+];
+
+/** Per-PC animation setting (saved in this browser only). */
+function MotionCard() {
+  const [setting, setSetting] = useState<MotionSetting>(readMotionSetting);
+  const [mode, setMode] = useState(() => (typeof document === 'undefined' ? undefined : document.documentElement.dataset.motion));
+  const choose = (value: MotionSetting) => { setSetting(value); setMode(saveMotionSetting(value)); };
+  const active = MOTION_OPTIONS.find((option) => option.value === setting);
+  return (
+    <Card className="surface-card">
+      <CardHeader>Animasi</CardHeader>
+      <CardBody>
+        <ButtonGroup size="sm" aria-label="Pengaturan animasi">
+          {MOTION_OPTIONS.map((option) => (
+            <Button key={option.value} color="secondary" variant={option.value === setting ? undefined : 'outline'} aria-pressed={option.value === setting} title={option.hint} onClick={() => choose(option.value)}>{option.label}</Button>
+          ))}
+        </ButtonGroup>
+        <p className="settings-note mt-2">{active?.hint}{setting === 'auto' && mode ? ` · sekarang: ${mode === 'lite' ? 'hemat' : mode === 'off' ? 'mati' : 'penuh'}` : ''}. Disimpan di browser PC ini saja.</p>
+      </CardBody>
+    </Card>
+  );
+}
 
 export function SettingsHealth({ onUnauthorized }: { onUnauthorized: () => void }) {
   const [health, setHealth] = useState<HealthSummary>();
@@ -196,6 +225,9 @@ export function SettingsHealth({ onUnauthorized }: { onUnauthorized: () => void 
               </dl>
             </CardBody>
           </Card>
+        </Col>
+        <Col xs={12}>
+          <MotionCard />
         </Col>
         <Col xs={12}>
           <Card className="surface-card">
