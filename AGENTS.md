@@ -189,4 +189,4 @@ The code is published at **`pandamoon21/SIMRS-Flow`** (public, PolyForm Noncomme
 - **Synthetic data only** in tests, docs and UI placeholders: No RM like `0-12-34-56` / `0-90-00-0x`, names like `PASIEN SATU`, hosts like `simrs.example.local` / `simrs.invalid`. Do not paste values from live runs (No RM, names, `no_transaksi`, SEP numbers, LIS links) — rewrite them first.
 - `.omo/`, `.data/`, `.env` are gitignored; keep agent evidence and screenshots there, not in tracked paths.
 - Before pushing to SIMRS-Flow, grep the diff for private IPs, `docs.google.com/spreadsheets/d/`, real-looking No RMs and local user paths (`C:\Users\…`).
-- CI runs on SIMRS-Flow (public runners). It is deliberately off for PKUAP, so run `npm run typecheck && npm run lint && npm test && bash scripts/livetest.sh` locally before merging there.
+- CI is deliberately off in both repos (PKUAP: not enabled; SIMRS-Flow: workflow disabled with `gh workflow disable CI`, re-enable with `gh workflow enable CI`). Run `npm run typecheck && npm run lint && npm test && bash scripts/livetest.sh` locally before merging.
