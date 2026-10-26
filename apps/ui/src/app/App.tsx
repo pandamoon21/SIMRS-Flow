@@ -57,6 +57,8 @@ function normalizePage(page: DashboardPage | 'start'): DashboardPage {
 /** A stream error that means the run is gone for good → the operator-facing reason; else undefined. */
 export function runLostMessage(error: string): string | undefined {
   if (/run_not_found/.test(error)) return 'Run tidak ditemukan lagi di orchestrator (kemungkinan orchestrator restart) — hasil run ini hilang, jalankan ulang.';
+  // The ledger replay of a run that never finished: the orchestrator stopped or restarted mid-run.
+  if (/no terminal event|ended with a partial line/.test(error)) return 'Run terputus — orchestrator berhenti atau dimulai ulang saat run berjalan. Langkah yang sudah tercatat tetap ada di History; jalankan ulang run untuk menyelesaikannya.';
   if (/failed after several attempts/.test(error)) return 'Koneksi ke orchestrator putus — status run ini tidak bisa diikuti lagi. Cek orchestrator lalu buka run dari History.';
   return undefined;
 }

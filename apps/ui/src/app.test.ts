@@ -135,6 +135,8 @@ describe('Lost run stream', () => {
   it('ends a run the orchestrator no longer knows, and leaves blips alone', () => {
     expect(runLostMessage('run_not_found')).toMatch(/orchestrator restart/);
     expect(runLostMessage('SSE connection failed after several attempts — check the orchestrator')).toMatch(/putus/);
+    expect(runLostMessage('run has no terminal event')).toMatch(/Run terputus/);
+    expect(runLostMessage('ledger ended with a partial line')).toMatch(/Run terputus/);
     expect(runLostMessage('SSE connection lost — reconnecting…')).toBeUndefined();
   });
 });
