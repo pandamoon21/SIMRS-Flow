@@ -100,7 +100,7 @@ async function fill(selector, value) {
 await send('Page.enable');
 await send('Runtime.enable');
 const [vw, vh] = size.split('x').map(Number);
-await send('Emulation.setDeviceMetricsOverride', { width: vw, height: vh, deviceScaleFactor: 1, mobile: false });
+await send('Emulation.setDeviceMetricsOverride', { width: vw, height: vh, deviceScaleFactor: 1, mobile: vw < 900 });
 await send('Page.navigate', { url: APP });
 await sleep(1500);
 await evaluate(`(${args.theme === 'light'} ? localStorage.removeItem('simrs-flow-theme') : localStorage.setItem('simrs-flow-theme','dark')), sessionStorage.clear(), localStorage.removeItem('simrs-flow.token'), localStorage.removeItem('simrs-flow.run.panels.v1'), 'ok'`);

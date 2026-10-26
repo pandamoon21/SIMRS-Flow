@@ -1200,7 +1200,8 @@ button:disabled,
   .run-inspector > .panel-card, .run-console-dock > .panel-card { height: auto; margin-top: 0; }
   .run-inspector .panel-scroll, .run-console-dock .panel-scroll { max-height: 60vh; }
   /* Leaves page area outside the graph to scroll by touch; React Flow owns drags inside. */
-  .run-live-body { flex: none; height: clamp(320px, 58vh, 560px); margin-top: 12px; border-block: 1px solid var(--line); }
+  /* Base height leaves room to scroll to the stacked panels; with them closed it grows into the empty space. */
+  .run-live-body { flex: 1 0 clamp(320px, 58vh, 560px); height: auto; margin-top: 12px; border-block: 1px solid var(--line); }
   .run-live-empty { padding: 28px 16px; }
 }
 
