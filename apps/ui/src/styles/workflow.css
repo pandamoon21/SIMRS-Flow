@@ -962,9 +962,10 @@ html[data-theme='light'] .log-box {
     grid-template-columns: 1fr;
   }
 
-  .canvas-helper-panel { max-width: min(280px, calc(100% - 20px)); }
-  .canvas-helper-panel .btn-group { display: flex; flex-wrap: wrap; }
-  .canvas-helper-panel .btn { flex: 1 1 calc(50% - 4px); }
+  /* One scrollable row: a wrapped toolbar covered most of a phone-width graph. */
+  .react-flow__panel.canvas-helper-panel { max-width: calc(100% - 20px); flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; scrollbar-width: none; padding: 4px; }
+  .canvas-helper-panel .btn-group { display: flex; flex: none; flex-wrap: nowrap; }
+  .canvas-helper-panel .btn { flex: none; padding: 3px 8px; font-size: 12px; white-space: nowrap; }
 
 }
 
