@@ -64,3 +64,34 @@ describe('QA runs through the orchestrator', () => {
     expect(state.nodes.load_visits.status).toBe('success'); // no fault was injected
   });
 });
+
+describe('ranap fails closed when a SIMRS read fails (QA faults)', () => {
+  const AUTH = { authorization: 'Bearer t' };
+  const run = async (faults: unknown[]) => {
+    const app = buildServer({ ledger: new MemoryLedger(), qaAuth: { token: 't', operator: 'op' } });
+    const created = await app.inject({ method: 'POST', url: '/api/runs', headers: AUTH, payload: { workflowId: ranapWorkflow.id, mode: 'preview', input: RANAP_HAPPY_INPUT, qa: { faults } } });
+    return (app as any).runService.waitFor(created.json().runId);
+  };
+
+  it('happy fixture still reaches the final gate', async () => {
+    const state = await run([]);
+    expect(state.nodes.preverify_summary.status).toBe('success');
+    expect(state.nodes.final_gate.status).toBe('blocked'); // preview hold
+  });
+
+  it('an unread verification status or payment history stops the run at once', async () => {
+    const verif = await run([{ kind: 'network', endpointId: 'kasir.cekStatusVerifikasi', times: 1 }]);
+    expect(verif.nodes.reject_verified.status).toBe('blocked');
+    expect(verif.nodes.reject_verified.summary).toContain('tidak terbaca');
+    const paid = await run([{ kind: 'network', endpointId: 'kasir.getHistoryPembayaran', times: 1 }]);
+    expect(paid.nodes.reject_paid.status).toBe('blocked');
+    expect(paid.nodes.final_gate.status).toBe('pending');
+  });
+
+  it('one failed charge read holds verification at the pre-verification summary', async () => {
+    const state = await run([{ kind: 'http500', endpointId: 'penatajasaInap.getListTindakan', times: 1 }]);
+    expect(state.nodes.validate_ibs.status).toBe('needs_review');
+    expect(state.nodes.preverify_summary.status).toBe('blocked');
+    expect(state.nodes.final_gate.status).toBe('pending');
+  });
+});
