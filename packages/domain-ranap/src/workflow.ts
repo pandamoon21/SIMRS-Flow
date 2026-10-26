@@ -169,7 +169,10 @@ const EDGE_SPECS: EdgeSpec[] = [
   ['evaluate_titipan', 'check_berkas', 'sequential'],
   ['final_gate', 'execute_verifikasi', 'guard', undefined, 'disetujui'],
   ['execute_verifikasi', 'tampung_bayar', 'guard', undefined, 'terverifikasi'],
-  ['tampung_bayar', 'emit_summary', 'sequential'],
+  // Optional joins: the summary row is wanted even when Setup switches
+  // Verifikasi / Tampung Bayar off (a cleanup-only run), so neither edge is required.
+  ['tampung_bayar', 'emit_summary', 'parallel'],
+  ['check_balance', 'emit_summary', 'parallel'],
 ];
 
 export const ranapWorkflow: WorkflowDefinition = {

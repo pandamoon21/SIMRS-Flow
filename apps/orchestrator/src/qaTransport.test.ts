@@ -95,3 +95,17 @@ describe('ranap fails closed when a SIMRS read fails (QA faults)', () => {
     expect(state.nodes.final_gate.status).toBe('pending');
   });
 });
+
+describe('ranap cleanup-only run (Verifikasi off)', () => {
+  it('still produces the Ringkasan summary row', async () => {
+    const app = buildServer({ ledger: new MemoryLedger(), qaAuth: { token: 't', operator: 'op' } });
+    const created = await app.inject({ method: 'POST', url: '/api/runs', headers: { authorization: 'Bearer t' }, payload: {
+      workflowId: ranapWorkflow.id, mode: 'preview', input: RANAP_HAPPY_INPUT,
+      enabled: { final_gate: false, execute_verifikasi: false, tampung_bayar: false },
+    } });
+    const state = await (app as any).runService.waitFor(created.json().runId);
+    expect(state.nodes.tampung_bayar.status).toBe('skipped');
+    expect(state.nodes.emit_summary.status).toBe('success');
+    expect(state.status).toBe('completed');
+  });
+});
