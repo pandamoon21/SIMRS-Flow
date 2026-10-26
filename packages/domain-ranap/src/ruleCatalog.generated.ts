@@ -1275,7 +1275,7 @@ export const ranapRuleCatalog: RuleCatalog = {
       "outcomes": [
         {
           "status": "success",
-          "text": "Siap verifikasi … grup rawat inap — menunggu persetujuan dua operator"
+          "text": "Siap verifikasi … grup rawat inap — menunggu persetujuan"
         }
       ],
       "issues": [],

@@ -89,7 +89,7 @@ export interface ServerOptions {
    * unless the host explicitly opts in.
    */
   autoApproveWrites?: boolean;
-  /** `CRITICAL_APPROVALS` (1 or 2, default 2); see RunServiceOptions. */
+  /** `CRITICAL_APPROVALS` (1 or 2; main.ts defaults to 1); see RunServiceOptions. */
   criticalApprovals?: 1 | 2;
   /** Rules-page store; defaults to a memory-only store (built-in values). */
   rules?: RuleStore;

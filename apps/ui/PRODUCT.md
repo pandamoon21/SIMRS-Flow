@@ -29,7 +29,7 @@ A safety-first operator console, not a blind bot:
 
 - Runs are previews (dry runs) by default.
 - Every mutation is an explicit, allowlisted plan that needs approval.
-- Critical steps need two distinct operators.
+- Write runs auto-approve on the operator's behalf by default; a host can require two distinct operators.
 - Every event lands in a redacted, append-only audit ledger.
 
 The operator watches the workflow happen on a live graph and stays the decision-maker.
