@@ -12,7 +12,7 @@ import { RuleStore } from './rules.js';
 import { NaikKelasStore } from './naikKelas.js';
 import { accessUrls, corsOriginsFromEnv, env } from './config.js';
 import { networkInterfaces } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /** Placeholder until EVOMEDIS_BASE_URL is set: logins fail, offline fixtures still work. */
@@ -105,7 +105,8 @@ async function main(): Promise<void> {
     // eslint-disable-next-line no-console
     for (const url of accessUrls(host, port, networkInterfaces()).urls) console.log(`[orchestrator] open: ${url}`);
     // eslint-disable-next-line no-console
-    console.log(`[orchestrator] audit ledger: ${auditDir}`);
+    // Relative data paths resolve from the process directory (apps/orchestrator under npm, app\ in the portable build).
+    console.log(`[orchestrator] audit ledger: ${resolve(auditDir)}`);
     // eslint-disable-next-line no-console
     console.log(`[orchestrator] EvoMedis target: ${baseUrlV1}`);
     // eslint-disable-next-line no-console

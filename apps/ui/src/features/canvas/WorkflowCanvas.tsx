@@ -198,6 +198,7 @@ export function WorkflowCanvas({ onReviewNode, onSelectExecutableNode }: Workflo
         plansVerified: outcomes.filter((outcome) => outcome?.status === 'verified').length,
         plansFailed: outcomes.filter((outcome) => outcome?.status === 'failed' || outcome?.status === 'invalidated').length,
         isWriteRun: state?.mode === 'write',
+        runEnded: Boolean(state && ['completed', 'failed', 'cancelled'].includes(state.status)),
         trail: decisionTrailOf(rt, state?.mutations),
         reasons: reasons.checks,
         reasonsHidden: reasons.hidden,

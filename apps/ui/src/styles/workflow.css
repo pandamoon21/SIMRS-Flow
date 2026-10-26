@@ -609,6 +609,14 @@ html[data-theme='light'] .risk-critical { color: #9b1c1c; }
   overflow-wrap: anywhere;
 }
 
+.evidence-raw > summary {
+  cursor: pointer;
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.evidence-raw[open] > summary { margin-bottom: 6px; }
+
 .evidence-json {
   max-height: 180px;
   margin: 0;

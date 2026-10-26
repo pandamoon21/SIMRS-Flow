@@ -220,6 +220,8 @@ function AlertGroups({ groups }: { groups: readonly RegAlertGroup[] }) {
   );
 }
 
+const RISK_LABEL: Record<string, string> = { low: 'rendah', medium: 'sedang', high: 'tinggi', critical: 'kritis' };
+
 /** Pick a renderer by evidence label, falling back to formatted JSON. */
 function EvidenceBody({ item }: { item: Evidence }) {
   const { label, data } = item;
@@ -251,7 +253,13 @@ function EvidenceBody({ item }: { item: Evidence }) {
       </dl>
     );
   }
-  return <pre className="evidence-json">{JSON.stringify(data, null, 2)}</pre>;
+  // Anything without an operator-facing renderer is for support, not for the cashier.
+  return (
+    <details className="evidence-raw">
+      <summary>Detail teknis</summary>
+      <pre className="evidence-json">{JSON.stringify(data, null, 2)}</pre>
+    </details>
+  );
 }
 
 export function NodeInspector({ onApproveGate, onRejectGate, onApproveMutation, onHide }: NodeInspectorProps) {
@@ -280,16 +288,15 @@ export function NodeInspector({ onApproveGate, onRejectGate, onApproveMutation, 
         {onHide ? <button type="button" className="panel-close" aria-label="Tutup inspector" title="Tutup inspector" onClick={onHide}>×</button> : null}
       </CardHeader>
       <CardBody className="panel-scroll">
-        {!definition || !selectedNodeId ? <div className="empty">Select a node to inspect status, evidence, and plans.</div> : null}
+        {!definition || !selectedNodeId ? <div className="empty">Pilih node untuk melihat status, bukti, dan rencana.</div> : null}
         {definition && selectedNodeId ? (
           <>
             <dl className="summary-list compact-summary">
-              <dt>Step</dt><dd>{sectionLabel ?? definitionNode?.group ?? '—'}</dd>
-              <dt>Kind</dt><dd>{definitionNode?.kind}</dd>
+              <dt>Tahap</dt><dd>{sectionLabel ?? definitionNode?.group ?? '—'}</dd>
               <dt>Status</dt><dd><Badge color={STATUS_TONE[runtimeNode?.status ?? 'pending'] ?? 'secondary'}>{NODE_STATUS_LABEL[runtimeNode?.status ?? 'pending']}</Badge></dd>
-              {runtimeNode?.durationMs !== undefined ? <><dt>Duration</dt><dd>{runtimeNode.durationMs} ms</dd></> : null}
-              {definitionNode?.riskLevel ? <><dt>Risk</dt><dd><Badge color={definitionNode.riskLevel === 'critical' ? 'danger' : definitionNode.riskLevel === 'high' ? 'warning' : 'info'}>{definitionNode.riskLevel}</Badge></dd></> : null}
-              {runtimeNode?.summary ? <><dt>Summary</dt><dd>{runtimeNode.summary}</dd></> : null}
+              {runtimeNode?.durationMs !== undefined ? <><dt>Durasi</dt><dd>{runtimeNode.durationMs} ms</dd></> : null}
+              {definitionNode?.riskLevel ? <><dt>Risiko</dt><dd><Badge color={definitionNode.riskLevel === 'critical' ? 'danger' : definitionNode.riskLevel === 'high' ? 'warning' : 'info'}>{RISK_LABEL[definitionNode.riskLevel] ?? definitionNode.riskLevel}</Badge></dd></> : null}
+              {runtimeNode?.summary ? <><dt>Ringkasan</dt><dd>{runtimeNode.summary}</dd></> : null}
               <dt>ID</dt><dd className="mono">{selectedNodeId}</dd>
             </dl>
 
@@ -413,10 +420,11 @@ export function NodeInspector({ onApproveGate, onRejectGate, onApproveMutation, 
               </section>
             ) : null}
 
-            {runtimeNode?.evidence.length ? (
+            {runtimeNode?.evidence.some((item) => item.label !== 'reasoning') ? (
               <section className="panel-section">
-                <h2>Evidence</h2>
-                {runtimeNode.evidence.map((item, index) => (
+                <h2>Bukti</h2>
+                {/* `reasoning` is already drawn as Alur Keputusan above. */}
+                {runtimeNode.evidence.filter((item) => item.label !== 'reasoning').map((item, index) => (
                   <div className="evidence-block" key={`${item.label}-${index}`}>
                     <div className="evidence-head">
                       <strong>{item.label}</strong>
