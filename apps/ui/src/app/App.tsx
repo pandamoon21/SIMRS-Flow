@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from 're
 import { ranapWorkflow } from '@simrs-flow/domain-ranap';
 import { rajalWorkflow } from '@simrs-flow/domain-rajal';
 import { mockEventStream } from '@simrs-flow/test-fixtures';
-import { type ExecutionMode, type WorkflowDefinition } from '@simrs-flow/workflow-core';
+import { type ExecutionMode, type WorkflowDefinition, type WorkflowEvent } from '@simrs-flow/workflow-core';
 import type { RunInputResult } from '../features/forms/RunInputForm.js';
 import { useRunStore } from '../store/runStore.js';
 import { api, UnauthorizedError, type RunSummary } from '../api/client.js';
@@ -33,6 +33,9 @@ const WORKFLOW_LABELS = Object.fromEntries(Object.values(WORKFLOWS).map((workflo
 
 export type Source = 'offline' | 'live';
 
+/** Streamed events are applied in batches this far apart (one render per batch). */
+const EVENT_BATCH_MS = 50;
+
 export function liveStartBlockerOf(source: Source, runInput: RunInputResult): string | undefined {
   if (source !== 'live') return undefined;
   if (runInput.error) return runInput.error;
@@ -54,6 +57,8 @@ function normalizePage(page: DashboardPage | 'start'): DashboardPage {
 /** A stream error that means the run is gone for good → the operator-facing reason; else undefined. */
 export function runLostMessage(error: string): string | undefined {
   if (/run_not_found/.test(error)) return 'Run tidak ditemukan lagi di orchestrator (kemungkinan orchestrator restart) — hasil run ini hilang, jalankan ulang.';
+  // The ledger replay of a run that never finished: the orchestrator stopped or restarted mid-run.
+  if (/no terminal event|ended with a partial line/.test(error)) return 'Run terputus — orchestrator berhenti atau dimulai ulang saat run berjalan. Langkah yang sudah tercatat tetap ada di History; jalankan ulang run untuk menyelesaikannya.';
   if (/failed after several attempts/.test(error)) return 'Koneksi ke orchestrator putus — status run ini tidak bisa diikuti lagi. Cek orchestrator lalu buka run dari History.';
   return undefined;
 }
@@ -100,7 +105,7 @@ export function App() {
 
   const loadReplay = useRunStore((store) => store.loadReplay);
   const loadDefinition = useRunStore((store) => store.loadDefinition);
-  const pushEvent = useRunStore((store) => store.pushEvent);
+  const pushEvents = useRunStore((store) => store.pushEvents);
   const markRunLost = useRunStore((store) => store.markRunLost);
   const seek = useRunStore((store) => store.seek);
   const cancelReplay = useRunStore((store) => store.cancelReplay);
@@ -154,14 +159,27 @@ export function App() {
 
   const streamRun = useCallback((id: string) => {
     unsubRef.current?.();
-    unsubRef.current = api.streamEvents(id, pushEvent, (error) => {
+    // Opening a finished or reconnected run replays its whole history in one
+    // burst; applying events in ~50 ms batches renders once per batch instead
+    // of once per event (thousands of renders froze office PCs for seconds).
+    let queue: WorkflowEvent[] = [];
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const flush = () => { timer = undefined; const batch = queue; queue = []; pushEvents(batch); };
+    const unsubscribe = api.streamEvents(id, (event) => {
+      queue.push(event);
+      timer ??= setTimeout(flush, EVENT_BATCH_MS);
+    }, (error) => {
+      // Keep order: whatever arrived before the error lands first.
+      if (timer !== undefined) { clearTimeout(timer); flush(); }
       if (/unauthorized/i.test(error.message)) return onUnauthorized();
       const lost = runLostMessage(error.message);
       // Otherwise the projection sits in "Berjalan" forever with nothing behind it.
       if (lost) markRunLost(lost);
       setLiveError(lost ?? error.message);
     });
-  }, [onUnauthorized, pushEvent, markRunLost]);
+    // Leaving this run drops its unapplied tail: the next run has already reset the store.
+    unsubRef.current = () => { unsubscribe(); if (timer !== undefined) clearTimeout(timer); queue = []; };
+  }, [onUnauthorized, pushEvents, markRunLost]);
 
   // Auto-advance the replay from `fromIndex` up to `total`, storing the timer so
   // a restart, pause, or cancel can stop it cleanly.

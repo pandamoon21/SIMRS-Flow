@@ -52,6 +52,7 @@ import { getWorkflow, type ExecutorFactoryArgs, type WorkflowEntry } from './reg
 import { deriveLockKeys, TransactionLocks } from './locks.js';
 import { applyApprovedMutation, type MutationApplyResult } from './mutationGate.js';
 import { ReloginTransport } from './reloginTransport.js';
+import { QaTransport, qaFixtures, qaFixtureTransport, type QaRunOptions } from './qaTransport.js';
 import type { UserSessionStore } from './sessions.js';
 import { applyRules, type RuleStore } from './rules.js';
 
@@ -204,6 +205,8 @@ export interface CreateRunInput {
    * authenticated operator may set it, and it is refused in preview mode.
    */
   autoApprove?: boolean;
+  /** QA harness (scenario, latency, faults). The server passes it only on a QA host. */
+  qa?: QaRunOptions;
 }
 
 /** Live SIMRS connection, resolved from the environment by the entrypoint. */
@@ -363,6 +366,10 @@ export class RunService {
     }
     const mode: ExecutionMode = req.mode ?? 'preview';
     const source: RunSource = req.source ?? 'fixture';
+    if (req.qa?.scenario && source !== 'live') {
+      try { qaFixtures(entry.definition.domain === 'rajal' ? 'rajal' : 'ranap', req.qa.scenario); }
+      catch (err) { throw httpError(400, (err as Error).message); }
+    }
 
     // Write runs must be attributed to an authenticated operator.
     if (mode === 'write' && !req.operator) {
@@ -487,8 +494,12 @@ export class RunService {
       mode,
       mutationAllowlist: entry.definition.policies?.mutationAllowlist,
     };
+    if (req.qa && source !== 'live') {
+      factoryArgs.transport = qaFixtureTransport(entry.definition.domain === 'rajal' ? 'rajal' : 'ranap', req.qa);
+    }
     if (source === 'live' && liveCookie && liveBaseUrl) {
-      const fetchTransport = new FetchTransport();
+      // QA faults sit inside the re-login wrapper, so a dropped cookie exercises the real recovery.
+      const fetchTransport = req.qa ? new QaTransport(new FetchTransport(), req.qa) : new FetchTransport();
       // For per-user sessions, wrap the transport so an expired cookie triggers
       // a silent re-login + retry using the user's retained credentials.
       factoryArgs.transport =

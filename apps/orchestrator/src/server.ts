@@ -547,7 +547,9 @@ export function buildServer(options: ServerOptions): FastifyInstance {
     }
 
     try {
-      const { runId } = await service.createRun({ ...body, autoApprove, operator, sessionToken });
+      // `qa` (fixture scenarios, latency, faults) is honoured on a QA host only.
+      const { qa, ...rest } = body;
+      const { runId } = await service.createRun({ ...rest, autoApprove, operator, sessionToken, ...(qaAuth && qa ? { qa } : {}) });
       return reply.code(201).send({ runId });
     } catch (err) {
       const statusCode = (err as { statusCode?: number }).statusCode ?? 500;

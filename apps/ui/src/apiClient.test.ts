@@ -233,5 +233,49 @@ describe('UI api client — auth', () => {
       vi.useRealTimers();
     }
   });
-});
 
+  it('releases the stream while the tab is hidden and resumes, deduped, when shown', () => {
+    vi.useFakeTimers();
+    const listeners = new Set<() => void>();
+    const doc = { visibilityState: 'visible', addEventListener: (_: string, f: () => void) => listeners.add(f), removeEventListener: (_: string, f: () => void) => listeners.delete(f) };
+    (globalThis as unknown as { document: unknown }).document = doc;
+    const setVisibility = (state: string) => { doc.visibilityState = state; for (const f of listeners) f(); };
+    try {
+      const received: string[] = [];
+      const unsubscribe = api.streamEvents('run-1', (event) => received.push(event.eventId!));
+      const frame = (eventId: string, type = 'log.appended') => ({ data: JSON.stringify({ eventId, runId: 'run-1', seq: 1, type }) }) as MessageEvent<string>;
+      eventSources[0]!.onmessage?.(frame('e1'));
+
+      setVisibility('hidden');
+      vi.advanceTimersByTime(9_000);
+      expect(eventSources[0]!.closed).toBe(false); // a quick tab switch keeps the stream
+      vi.advanceTimersByTime(2_000);
+      expect(eventSources[0]!.closed).toBe(true); // the connection slot is free for other tabs
+
+      setVisibility('visible');
+      expect(eventSources).toHaveLength(2);
+      eventSources[1]!.onmessage?.(frame('e1')); // replayed history
+      eventSources[1]!.onmessage?.(frame('e2'));
+      expect(received).toEqual(['e1', 'e2']);
+
+      unsubscribe();
+      expect(listeners.size).toBe(0);
+    } finally {
+      vi.useRealTimers();
+      delete (globalThis as unknown as { document?: unknown }).document;
+    }
+  });
+
+  it('a stream opened in a background tab lets go without a visibility change', () => {
+    vi.useFakeTimers();
+    (globalThis as unknown as { document: unknown }).document = { visibilityState: 'hidden', addEventListener: () => undefined, removeEventListener: () => undefined };
+    try {
+      api.streamEvents('run-1', () => undefined);
+      vi.advanceTimersByTime(11_000);
+      expect(eventSources[0]!.closed).toBe(true);
+    } finally {
+      vi.useRealTimers();
+      delete (globalThis as unknown as { document?: unknown }).document;
+    }
+  });
+});

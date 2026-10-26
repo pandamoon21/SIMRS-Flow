@@ -70,6 +70,10 @@ export const ranapRuleCatalog: RuleCatalog = {
           "text": "Tidak ada kunjungan untuk diperiksa"
         },
         {
+          "status": "blocked",
+          "text": "Status verifikasi tidak terbaca dari SIMRS — run dihentikan. Jalankan ulang run."
+        },
+        {
           "status": "success",
           "text": "Tidak ada transaksi terverifikasi dari … kunjungan"
         },
@@ -78,7 +82,12 @@ export const ranapRuleCatalog: RuleCatalog = {
           "text": "… kunjungan sudah terverifikasi"
         }
       ],
-      "issues": [],
+      "issues": [
+        {
+          "code": "verifikasi_unreadable",
+          "text": "Read kasir.cekStatusVerifikasi gagal"
+        }
+      ],
       "findings": [],
       "actions": [],
       "reads": [
@@ -95,6 +104,10 @@ export const ranapRuleCatalog: RuleCatalog = {
           "text": "Tidak ada kunjungan untuk diperiksa"
         },
         {
+          "status": "blocked",
+          "text": "Riwayat pembayaran tidak terbaca dari SIMRS — run dihentikan. Jalankan ulang run."
+        },
+        {
           "status": "success",
           "text": "Tidak ada riwayat pembayaran dari … kunjungan"
         },
@@ -103,7 +116,12 @@ export const ranapRuleCatalog: RuleCatalog = {
           "text": "… kunjungan sudah memiliki riwayat pembayaran"
         }
       ],
-      "issues": [],
+      "issues": [
+        {
+          "code": "pembayaran_unreadable",
+          "text": "Read kasir.getHistoryPembayaran gagal"
+        }
+      ],
       "findings": [],
       "actions": [],
       "reads": [

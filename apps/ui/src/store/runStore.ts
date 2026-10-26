@@ -35,6 +35,8 @@ interface RunStoreState {
   loadDefinition: (def: WorkflowDefinition, mode: ExecutionMode) => void;
   /** Append a live event and apply it immediately. */
   pushEvent: (event: WorkflowEvent) => void;
+  /** Append several live events with one store update (one render), in order. */
+  pushEvents: (events: readonly WorkflowEvent[]) => void;
   /** Load a recorded event log for replay (does not apply yet). */
   loadReplay: (def: WorkflowDefinition, events: WorkflowEvent[], mode: ExecutionMode) => void;
   /** Advance/seek the replay cursor and re-project state. */
@@ -78,12 +80,15 @@ export const useRunStore = create<RunStoreState>((set, get) => ({
     });
   },
 
-  pushEvent: (event) => {
+  pushEvent: (event) => get().pushEvents([event]),
+
+  pushEvents: (batch) => {
     const { definition, state, events } = get();
-    if (!definition) return;
-    const base = state ?? initialRunState(definition, event.runId, 'preview');
-    const nextState = applyEvent(base, event);
-    set({ state: nextState, events: [...events, event], cursor: events.length + 1 });
+    if (!definition || batch.length === 0) return;
+    let next = state ?? initialRunState(definition, batch[0]!.runId, 'preview');
+    for (const event of batch) next = applyEvent(next, event);
+    const all = events.concat(batch);
+    set({ state: next, events: all, cursor: all.length });
   },
 
   loadReplay: (def, events, mode) => {

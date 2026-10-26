@@ -392,6 +392,20 @@ function recordReadFailure(ctx: ExecutorContext, endpointId: string): void {
   failures[endpointId] = (failures[endpointId] ?? 0) + 1;
 }
 
+/** How often `endpointId` failed so far this run (compare before/after a node's own reads). */
+function readFailureCount(ctx: ExecutorContext, endpointId: string): number {
+  return scratchRecord<number>(ctx, K.readFailures)[endpointId] ?? 0;
+}
+
+/**
+ * An unreadable comparison leaves nothing proven, so every group is held back
+ * from verification — fail closed — instead of the summary reading "bersih".
+ */
+function blockUnreadable(ctx: ExecutorContext, regs: readonly (readonly [string, unknown])[], reason: string): void {
+  const alerts = alertsOf(ctx);
+  for (const [reg] of regs) alerts.registerVerificationBlocker(reg, reason);
+}
+
 /** Which of `endpointIds` failed at least once during this run. */
 function failedReads(ctx: ExecutorContext, ...endpointIds: readonly string[]): string[] {
   const failures = scratchRecord<number>(ctx, K.readFailures);
@@ -1304,6 +1318,7 @@ export function createRanapExecutors(deps: RanapDeps): ExecutorRegistry {
       if (visits.length === 0) return skipped('Tidak ada kunjungan untuk diperiksa');
 
       // findVerifiedPaymentCandidates is pure, so the statuses are read first.
+      const statusFailuresBefore = readFailureCount(ctx, 'kasir.cekStatusVerifikasi');
       const statusByTrx = new Map<string, string>();
       for (const visit of visits) {
         const trx = str(visit, 'no_transaksi');
@@ -1311,6 +1326,13 @@ export function createRanapExecutors(deps: RanapDeps): ExecutorRegistry {
         statusByTrx.set(trx, await softText(ctx, client, 'kasir.cekStatusVerifikasi', { no_transaksi: trx }));
       }
 
+      // An unread status is not "belum terverifikasi": stop rather than work on a
+      // transaction that may already be verified.
+      if (readFailureCount(ctx, 'kasir.cekStatusVerifikasi') > statusFailuresBefore) {
+        return blocked('Status verifikasi tidak terbaca dari SIMRS — run dihentikan. Jalankan ulang run.', {
+          issues: [warning('verifikasi_unreadable', 'Read kasir.cekStatusVerifikasi gagal', 'error')],
+        });
+      }
       const verified = findVerifiedPaymentCandidates(visits, (trx) => statusByTrx.get(trx) ?? '');
       const verifiedTrx = new Set(verified.map((row) => str(row, 'no_transaksi')));
       const checks: ReasoningItem[] = visits.map((visit) => verifiedTrx.has(str(visit, 'no_transaksi'))
@@ -1350,6 +1372,7 @@ export function createRanapExecutors(deps: RanapDeps): ExecutorRegistry {
 
       // `kasir.getHistoryPembayaran` is a GET: its parameters travel in the
       // query string, not a form body (see the registry entry).
+      const payFailuresBefore = readFailureCount(ctx, 'kasir.getHistoryPembayaran');
       const historyByKey = new Map<string, LegacyRow[]>();
       for (const visit of visits) {
         const reg = str(visit, 'no_registrasikunjungan');
@@ -1364,6 +1387,13 @@ export function createRanapExecutors(deps: RanapDeps): ExecutorRegistry {
           { query: { no_registrasikunjungan: reg, no_transaksi: trx } },
         );
         historyByKey.set(key, rowsOf(res));
+      }
+
+      // An unread payment history is not "belum pernah dibayar".
+      if (readFailureCount(ctx, 'kasir.getHistoryPembayaran') > payFailuresBefore) {
+        return blocked('Riwayat pembayaran tidak terbaca dari SIMRS — run dihentikan. Jalankan ulang run.', {
+          issues: [warning('pembayaran_unreadable', 'Read kasir.getHistoryPembayaran gagal', 'error')],
+        });
       }
 
       const paid = findPaidPaymentCandidates(
@@ -4210,6 +4240,7 @@ export function createRanapExecutors(deps: RanapDeps): ExecutorRegistry {
         }), ibsTitle, ibsChecks);
       }
       if (unreadable.length > 0) {
+        blockUnreadable(ctx, regs, 'IBS tidak dapat dipastikan (data tidak terbaca)');
         return reasoned(review('Validasi IBS tidak dapat dipastikan — data pembanding tidak terbaca', {
           warnings: [warning('ibs_unreadable', `Read gagal: ${unreadable.join(', ')}`)],
         }), ibsTitle, ibsChecks);
@@ -4360,6 +4391,7 @@ export function createRanapExecutors(deps: RanapDeps): ExecutorRegistry {
       // until the failure is recorded.
       const unreadable = failedReads(ctx, ...PENUNJANG_HISTORY_ENDPOINTS);
       if (unreadable.length > 0) {
+        blockUnreadable(ctx, regs, 'hasil penunjang tidak dapat dipastikan (history tidak terbaca)');
         return reasoned(review('Hasil penunjang tidak dapat dipastikan — history penunjang tidak terbaca', {
           warnings: [warning('penunjang_unreadable', `Read gagal: ${unreadable.join(', ')}`)],
         }), penunjangTitle, [...penunjangChecks, { label: 'History penunjang terbaca', ok: false, detail: `gagal: ${unreadable.join(', ')}` }]);
@@ -4461,6 +4493,7 @@ export function createRanapExecutors(deps: RanapDeps): ExecutorRegistry {
         'verifikator.getDetailTransaksi',
       );
       if (unreadable.length > 0) {
+        blockUnreadable(ctx, regs, 'obat pulang tidak dapat dipastikan (data tidak terbaca)');
         return reasoned(review('Obat pulang tidak dapat dipastikan — data pembanding tidak terbaca', {
           warnings: [warning('obat_pulang_unreadable', `Read gagal: ${unreadable.join(', ')}`)],
         }), obatTitle, [...obatChecks, { label: 'Data pembanding obat terbaca', ok: false, detail: `gagal: ${unreadable.join(', ')}` }]);
