@@ -474,7 +474,7 @@ describe('rajal dry-run', () => {
     });
 
     expect(result.state.nodes.validate_treatment!.status).toBe('success');
-    expect(result.state.nodes.validate_treatment!.summary).toMatch(/1\/2 treatment row\(s\) matched filters/);
+    expect(result.state.nodes.validate_treatment!.summary).toMatch(/1\/2 baris tindakan cocok dengan aturan/);
   });
 
   it('needs review when treatment include filters match nothing', async () => {
@@ -550,7 +550,7 @@ describe('rajal dry-run', () => {
     const result = await runner.run({ mode: 'preview', input: RAJAL_HAPPY_INPUT, runId: 'rajal_multi_record' });
 
     expect(result.state.nodes.validate_transaction!.summary).toBe('2 transaksi Rawat Jalan');
-    expect(result.state.nodes.validate_treatment!.summary).toMatch(/across 2 record\(s\)/);
+    expect(result.state.nodes.validate_treatment!.summary).toMatch(/pada 2 kunjungan/);
     expect(result.state.nodes.submit_payment!.proposedMutations.map((plan) => plan.payloadSummary.no_transaksi)).toEqual([
       '01-200001',
       '01-200002',
@@ -868,7 +868,7 @@ describe('rajal penunjang guards', () => {
   it('passes lab PA when the order has detail lines and a printable result', async () => {
     const { result, transport } = await runRajal(LAB_PA_CLEAN, 'rajal_labpa_clean');
     expect(result.state.nodes.validate_lab_pa!.status).toBe('success');
-    expect(result.state.nodes.validate_lab_pa!.summary).toBe('1 tindakan lab pa sudah ada hasilnya');
+    expect(result.state.nodes.validate_lab_pa!.summary).toBe('1 tindakan lab PA sudah ada hasilnya');
     expect(mutatingCalls(transport)).toHaveLength(0);
   });
 
@@ -985,7 +985,7 @@ describe('rajal penunjang guards', () => {
     const { result } = await runRajal({}, 'rajal_penunjang_absent');
     expect(result.state.nodes.validate_radiology!.summary).toBe('Tidak ada tindakan radiologi yang ditagih');
     expect(result.state.nodes.validate_elektromedik!.summary).toBe('Tidak ada tindakan elektromedik yang ditagih');
-    expect(result.state.nodes.validate_lab_pa!.summary).toBe('Tidak ada tindakan lab pa yang ditagih');
+    expect(result.state.nodes.validate_lab_pa!.summary).toBe('Tidak ada tindakan lab PA yang ditagih');
     expect(result.state.nodes.validate_lab!.summary).toBe('Tidak ada tindakan laboratorium yang ditagih');
   });
 });

@@ -121,7 +121,7 @@ export interface RunResult {
   status: RunState['status'];
 }
 
-const SKIP: StepResult = { status: 'skipped', summary: 'Disabled' };
+const SKIP: StepResult = { status: 'skipped', summary: 'Dimatikan di Setup' };
 
 /** A node kind that performs writes when approved. */
 function isMutating(node: WorkflowNodeDefinition): boolean {
@@ -212,7 +212,7 @@ export class WorkflowRunner {
             type: 'node.skipped',
             nodeId: node.id,
             message: `${node.label} dimatikan di Setup`,
-            data: { summary: 'Disabled' },
+            data: { summary: 'Dimatikan di Setup' },
           });
           blockingUpstream.add(node.id);
           continue;
@@ -269,7 +269,7 @@ export class WorkflowRunner {
             type: 'node.skipped',
             nodeId: node.id,
             message: `${node.label} dilewati — langkah sebelumnya belum terpenuhi`,
-            data: { summary: 'Upstream unmet' },
+            data: { summary: 'Langkah sebelumnya belum terpenuhi' },
           });
           blockingUpstream.add(node.id);
           continue;

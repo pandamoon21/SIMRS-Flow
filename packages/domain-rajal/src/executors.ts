@@ -460,7 +460,7 @@ function penunjangValidator(
         summary: `${kept.length} kunjungan tersisa setelah cek ${label.toLowerCase()}; ${issues.length} dilewati — ${issues.join('; ')}`,
       };
     }
-    const lower = label.toLowerCase();
+    const lower = label.toLowerCase().replace(/\bpa\b/g, 'PA');
     return ok(billed === 0 ? `Tidak ada tindakan ${lower} yang ditagih` : `${billed} tindakan ${lower} sudah ada hasilnya`);
   };
 }
@@ -1131,8 +1131,8 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
       }
       return withReasoning(ok(
         include.length || exclude.length
-          ? `${matchedCount}/${totalCount} treatment row(s) matched filters across ${matching.length} record(s)`
-          : `${matchedCount} treatment row(s) across ${matching.length} record(s)`,
+          ? `${matchedCount}/${totalCount} baris tindakan cocok dengan aturan pada ${matching.length} kunjungan`
+          : `${matchedCount} baris tindakan pada ${matching.length} kunjungan`,
       ));
     },
 

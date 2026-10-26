@@ -163,10 +163,10 @@ await clickButton('^Mulai preview$');
 let status = '';
 for (let s = 0; s < TIMEOUT_S; s++) {
   status = await evaluate(`document.querySelector('.run-status-badge')?.textContent.trim() ?? ''`);
-  if (['Selesai', 'Gagal', 'Dibatalkan'].includes(status)) break;
+  if (['Selesai', 'Preview selesai', 'Gagal', 'Dibatalkan'].includes(status)) break;
   await sleep(1000);
 }
-if (!['Selesai', 'Gagal', 'Dibatalkan'].includes(status)) { console.error(`FAIL: run did not finish in ${TIMEOUT_S}s (status=${status})`); process.exit(1); }
+if (!['Selesai', 'Preview selesai', 'Gagal', 'Dibatalkan'].includes(status)) { console.error(`FAIL: run did not finish in ${TIMEOUT_S}s (status=${status})`); process.exit(1); }
 console.log(`run status: ${status}`);
 
 // ── Fit, capture ──
