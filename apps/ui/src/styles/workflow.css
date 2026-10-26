@@ -1032,3 +1032,9 @@ html[data-theme='light'] .log-box {
   text-transform: uppercase;
   color: var(--accent);
 }
+
+/* The canvas cancels the page fit-zoom (React Flow needs unzoomed CSS px), so on a
+   1440p/4K screen its own toolbar and zoom buttons stayed 1080p-sized. Scale those
+   two back up there; below 1:1 they keep their full size, as before. */
+.react-flow__panel.canvas-helper-panel,
+.react-flow__controls { zoom: max(1, var(--fit-zoom, 1)); }

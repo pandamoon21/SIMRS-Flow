@@ -130,7 +130,8 @@ export async function fetchPatients(signal?: AbortSignal): Promise<PatientsResul
     const res = await fetch(`${BASE}/api/patients`, { credentials: 'include', signal });
     if (!res.ok) return fallbackPatients();
     const json = (await res.json()) as Partial<PatientsResult>;
-    if (!json.patients || json.patients.length === 0) return fallbackPatients();
+    // Real but empty data stays empty; only an unreachable endpoint falls back to demo.
+    if (!Array.isArray(json.patients)) return fallbackPatients();
     return { patients: json.patients, ...(json.demo ? { demo: true } : {}) };
   } catch {
     return fallbackPatients();

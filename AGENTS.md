@@ -151,7 +151,7 @@ node --import tsx scripts/pilot-live-write.ts                              # gua
 - `docs/legacy/{ranap,rajal}-parity.md` — read before assuming a legacy step is implemented; they document deliberate gaps.
 - `docs/superpowers/{specs,plans}/` — dated design specs and implementation plans (newest work, e.g. `run-log-mode-plan.md`). Check for an existing plan before designing a feature from scratch.
 
-**Known placeholders — do not mistake for real data:** `/api/billing/summary` and `/api/patients` return deterministic demo values, and presence/sticky-notes state is process-memory only. Dashboard numbers are mock.
+**Dashboard data:** `/api/billing/summary` and `/api/patients` are derived from the audit ledger (`apps/orchestrator/src/dashboard.ts`): only work done through this app, nominal = verified `kasir.tampungBayar` only, times in WIB. The UI falls back to labelled demo data only when the orchestrator is unreachable. Sticky notes persist in `NOTES_FILE`; presence is live process memory.
 
 ## Runtime/Tooling Preferences
 

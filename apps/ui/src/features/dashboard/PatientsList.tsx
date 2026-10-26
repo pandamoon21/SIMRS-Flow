@@ -131,7 +131,7 @@ export function PatientsList({ onUnauthorized, initialFilter = 'all' }: Patients
                   {rows.map((p) => (
                     <tr key={p.noRm} data-attention={p.status === 'needs_review' ? 'yes' : 'no'}>
                       <td className="mono">{p.noRm}</td>
-                      <td>{p.name}</td>
+                      <td>{p.name || '—'}</td>
                       <td>{WORKFLOW_LABEL[p.workflow]}</td>
                       <td className="mono">{p.date}</td>
                       <td><Badge color={CATEGORY_TONE[p.category]}>{CATEGORY_LABEL[p.category]}</Badge></td>

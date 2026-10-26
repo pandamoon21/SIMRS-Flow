@@ -694,6 +694,12 @@ export class RunService {
     return this.runs.get(runId)?.events;
   }
 
+  /** True while the run is still live in this process (not yet terminal). */
+  isLive(runId: string): boolean {
+    const status = this.runs.get(runId)?.state.status;
+    return status !== undefined && !['completed', 'failed', 'cancelled'].includes(status);
+  }
+
   /** Mode of a run (used by the server to decide whether auth is required). */
   getMode(runId: string): ExecutionMode | undefined {
     return this.runs.get(runId)?.mode;

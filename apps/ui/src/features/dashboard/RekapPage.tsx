@@ -376,7 +376,7 @@ export function RekapPage({ onUnauthorized, initialFilter = 'all' }: RekapPagePr
                     {pageRows.map((p) => (
                       <tr key={p.runId} data-attention={p.status === 'needs_review' ? 'yes' : 'no'}>
                         <td className="mono" data-label="No. RM">{p.noRm}</td>
-                        <td data-label="Nama" className="cell-name">{p.name}</td>
+                        <td data-label="Nama" className="cell-name">{p.name || '—'}</td>
                         <td data-label="Workflow">{WORKFLOW_LABEL[p.workflow]}</td>
                         <td className="mono" data-label="Tanggal">{p.date} <span className="metric-note">{p.time}</span></td>
                         <td data-label="Shift"><span className={`shift-pill shift-${p.shift}`}>Shift {p.shift}</span></td>

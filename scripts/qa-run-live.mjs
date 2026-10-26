@@ -125,6 +125,18 @@ if (!(await evaluate(`Boolean(document.querySelector('.icon-rail'))`))) {
   process.exit(1);
 }
 
+// ── Optional: one screenshot per rail page, plus horizontal overflow ──
+if (args.pages) {
+  const pages = await evaluate(`[...document.querySelectorAll('.icon-rail .rail-link .visually-hidden')].map((x) => x.textContent.trim())`);
+  for (const page of pages) {
+    await evaluate(`[...document.querySelectorAll('.icon-rail .rail-link')].find((x) => x.querySelector('.visually-hidden')?.textContent.trim() === ${JSON.stringify(page)})?.click(), 'ok'`);
+    await sleep(1500);
+    const overflowX = await evaluate(`document.scrollingElement.scrollWidth - innerWidth`);
+    console.log(`page ${page}: overflowX=${overflowX}`);
+    await shot(`${tag}-page-${page.toLowerCase().replace(/\W+/g, '-')}.png`);
+  }
+}
+
 // ── Configure ──
 await evaluate(`(() => { const a = [...document.querySelectorAll('.icon-rail .rail-link')].find((x) => x.querySelector('.visually-hidden')?.textContent.trim() === 'Run'); if (!a) throw new Error('Run nav not found'); a.click(); return 'ok'; })()`);
 await sleep(1200);
@@ -183,7 +195,11 @@ const summaryFit = await evaluate(`(() => {
   const c = document.querySelector('.canvas-wrap')?.getBoundingClientRect();
   if (!s) return { summary: 'absent' };
   const r = (x) => x && ({ top: Math.round(x.top), bottom: Math.round(x.bottom), h: Math.round(x.height) });
-  return { viewport: innerWidth + 'x' + innerHeight, scrollH: document.scrollingElement.scrollHeight, summary: r(s), bar: r(b), canvas: r(c), overlapBar: b ? Math.max(0, Math.round(s.bottom - b.top)) : 0, outsideCanvas: c ? Math.max(0, Math.round(c.top - s.top), Math.round(s.bottom - c.bottom)) : 0 };
+  // Canvas controls are re-zoomed inside an un-zoomed canvas: does a click at their centre hit them?
+  const hits = [...document.querySelectorAll('.canvas-helper-panel button, .react-flow__controls button')].filter((el) => el.offsetParent);
+  const inView = (el) => { const r = el.getBoundingClientRect(); const p = el.closest('.react-flow__panel')?.getBoundingClientRect(); return !p || (r.left >= p.left - 1 && r.right <= p.right + 1); };
+  const hitMiss = hits.filter(inView).filter((el) => { const r = el.getBoundingClientRect(); const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !(at && el.contains(at)); }).length;
+  return { hitTested: hits.length, hitMiss, viewport: innerWidth + 'x' + innerHeight, zoom: getComputedStyle(document.documentElement).zoom, scrollH: document.scrollingElement.scrollHeight, summary: r(s), bar: r(b), canvas: r(c), overlapBar: b ? Math.max(0, Math.round(s.bottom - b.top)) : 0, outsideCanvas: c ? Math.max(0, Math.round(c.top - s.top), Math.round(s.bottom - c.bottom)) : 0 };
 })()`);
 const headers = await evaluate(`[...document.querySelectorAll('.phase-header-name')].map((x) => x.textContent.trim())`);
 const edgeLabels = await evaluate(`[...document.querySelectorAll('.react-flow__edge-text')].map((x) => x.textContent.trim())`);
