@@ -198,6 +198,9 @@ export interface PresenceResult { operators: PresenceOperator[]; onlineCount: nu
 export type NoteColor = 'amber' | 'sky' | 'green' | 'pink';
 export interface StickyNote { id: string; author: string; text: string; color: NoteColor; createdAt: string; }
 
+/** A hidden tab keeps its run stream this long before releasing the connection. */
+const HIDDEN_RELEASE_MS = 10_000;
+
 export const api = {
   // ── Auth ──
   isAuthenticated: () => Boolean(authToken),
@@ -333,6 +336,28 @@ export const api = {
     let timer: ReturnType<typeof setTimeout> | undefined;
     let finished = false;
 
+    // Chrome allows 6 HTTP/1.1 connections per host and every watching tab holds
+    // one stream: from the 7th tab every request stalled. A tab hidden for a
+    // while lets go of its stream and picks it up again when shown; the replayed
+    // history is deduped by `seen`, so nothing is lost or doubled.
+    let hiddenTimer: ReturnType<typeof setTimeout> | undefined;
+    const onVisibility = () => {
+      if (closed || finished) return;
+      if (document.visibilityState === 'hidden') {
+        hiddenTimer ??= setTimeout(() => {
+          hiddenTimer = undefined;
+          if (timer !== undefined) { clearTimeout(timer); timer = undefined; }
+          source?.close();
+          source = undefined;
+        }, HIDDEN_RELEASE_MS);
+        return;
+      }
+      if (hiddenTimer !== undefined) { clearTimeout(hiddenTimer); hiddenTimer = undefined; }
+      if (!source && timer === undefined) { attempts = 0; connect(); }
+    };
+    const hasDocument = typeof document !== 'undefined';
+    if (hasDocument) document.addEventListener('visibilitychange', onVisibility);
+
     const close = () => {
       if (closed) return;
       closed = true;
@@ -340,6 +365,8 @@ export const api = {
         clearTimeout(timer);
         timer = undefined;
       }
+      if (hiddenTimer !== undefined) clearTimeout(hiddenTimer);
+      if (hasDocument) document.removeEventListener('visibilitychange', onVisibility);
       source?.close();
       source = undefined;
     };
@@ -396,6 +423,8 @@ export const api = {
     };
 
     connect();
+    // Opened in a background tab: no visibilitychange will come, so start the release clock now.
+    if (hasDocument && document.visibilityState === 'hidden') onVisibility();
     return close;
   },
 };
