@@ -4,7 +4,7 @@
  * Fastify server.
  */
 
-import { FileLedger, MemoryLedger, type Ledger } from '@simrs-flow/audit-ledger';
+import { FileLedger, type Ledger } from '@simrs-flow/audit-ledger';
 import { buildServer } from './server.js';
 import { createBerkasReader } from '@simrs-flow/berkas';
 import { UserSessionStore } from './sessions.js';
@@ -25,8 +25,10 @@ async function main(): Promise<void> {
   let host = env('ORCHESTRATOR_HOST', '0.0.0.0')!;
   const corsOrigins = corsOriginsFromEnv();
 
-  const auditDir = env('AUDIT_LEDGER_DIR');
-  const ledger: Ledger = auditDir ? new FileLedger(auditDir) : new MemoryLedger();
+  // Always on disk: an unset AUDIT_LEDGER_DIR used to fall back to an in-memory
+  // ledger, so live runs from a bare .env left no audit trail.
+  const auditDir = env('AUDIT_LEDGER_DIR', './.data/audit')!;
+  const ledger: Ledger = new FileLedger(auditDir);
 
   // EvoMedis target, from EVOMEDIS_BASE_URL (no built-in default). Users log
   // in per-user via POST /api/auth/login, which establishes their own cookie.
@@ -102,10 +104,8 @@ async function main(): Promise<void> {
     console.log(`[orchestrator] listening on http://${host}:${port} (mode default: preview)`);
     // eslint-disable-next-line no-console
     for (const url of accessUrls(host, port, networkInterfaces()).urls) console.log(`[orchestrator] open: ${url}`);
-    if (!auditDir) {
-      // eslint-disable-next-line no-console
-      console.log('[orchestrator] AUDIT_LEDGER_DIR not set — using in-memory ledger (non-persistent)');
-    }
+    // eslint-disable-next-line no-console
+    console.log(`[orchestrator] audit ledger: ${auditDir}`);
     // eslint-disable-next-line no-console
     console.log(`[orchestrator] EvoMedis target: ${baseUrlV1}`);
     // eslint-disable-next-line no-console
