@@ -159,9 +159,11 @@ import {
   type RowStatusProvider,
   type TindakanOp,
   type TindakanSyncIssue,
+  describeTindakanOp,
   pelaksanaHarga,
 } from './logic/tindakanSync.js';
 import {
+  describeVisiteOp,
   getSpesialisActionKey,
   getSpesialisFallbackKdUnit,
   komponenDetailKey,
@@ -478,6 +480,19 @@ function blocked(summary: string, extra?: Partial<StepResult>): StepResult {
 function skipped(summary: string): StepResult {
   return { status: 'skipped', summary };
 }
+/** Why the stay counts as entered via IGD / POLI: the entry visit and what matched it. */
+function originBasis(origin: { unit?: string; trx?: string; sepMatch?: boolean; doctorMatch?: boolean } | undefined): string | undefined {
+  if (!origin?.unit && !origin?.trx) return undefined;
+  const why = [origin.sepMatch ? 'SEP sama' : '', origin.doctorMatch ? 'dokter sama' : ''].filter(Boolean).join(', ');
+  return `kunjungan ${origin.unit || '-'}${origin.trx ? ` ${origin.trx}` : ''}${why ? ` (${why})` : ''}`;
+}
+
+/** A plan's "sekarang → seharusnya" line, when its builder recorded one (`payloadSummary.perubahan`). */
+function planChange(plan: MutationPlan): string | undefined {
+  const change = (plan.payloadSummary as Record<string, unknown> | undefined)?.perubahan;
+  return typeof change === 'string' && change ? change : undefined;
+}
+
 /** Attach the operator checklist (see workflow-core `reasoning.ts`) to a result. */
 function reasoned(result: StepResult, title: string, items: ReasoningItem[]): StepResult {
   return items.length ? { ...result, evidence: [...(result.evidence ?? []), reasoningEvidence({ title, items })] } : result;
@@ -1219,7 +1234,7 @@ export function createRanapExecutors(deps: RanapDeps): ExecutorRegistry {
       return reasoned(ok(`${patientIds.length} medrec, ${tanggal}, toleransi ±${toleranceDays} hari`), inputTitle, [
         { label: 'Format No RM valid', ok: true, detail: noRm },
         { label: 'Format tanggal valid', ok: true, detail: tanggal },
-        { label: `Toleransi tanggal ±${toleranceDays} hari`, ok: null },
+        { label: `Toleransi tanggal ±${toleranceDays} hari`, ok: null, detail: `kunjungan dicari ${toleranceDays} hari sebelum s/d sesudah ${tanggal}` },
         { label: 'Penjamin diterima', ok: null, detail: accepted.length > 0 ? accepted.join(', ') : 'semua' },
       ]);
     },
@@ -2728,7 +2743,7 @@ export function createRanapExecutors(deps: RanapDeps): ExecutorRegistry {
         const via = info.requiresIgdSource ? 'IGD' : 'POLI';
         const source = info.requiresIgdSource ? igdSourceByReg[reg] : poliSourceByReg[reg];
         return [
-          { label: `${prefix}Asal masuk: ${via}`, ok: true },
+          { label: `${prefix}Asal masuk: ${via}`, ok: true, detail: originBasis(info.inferredOrigin) ?? (source ? `kunjungan ${str(source, 'nama_unit') || via} ${str(source, 'no_transaksi')} sebelum rawat inap` : 'kunjungan asal tidak ditemukan') },
           { label: `${prefix}Transaksi ${via} asal ditemukan`, ok: source ? true : false, detail: source ? `${str(source, 'nama_unit') || via} · ${str(source, 'no_transaksi') || '-'}` : 'tidak ditemukan — tagihan asal tidak bisa ditarik otomatis' },
         ];
       });
@@ -3191,6 +3206,7 @@ export function createRanapExecutors(deps: RanapDeps): ExecutorRegistry {
               no_transaksipoli: noTransaksiPoli,
               biaya,
               tindakan: kdTindakanList.length,
+              perubahan: `${kdTindakanList.length} tindakan POLI ${poliTrx} (Rp ${Number(biaya).toLocaleString('id-ID')}) → tagihan rawat inap ${noTransaksiPoli}`,
             },
             readAfterWriteChecks: sortedRows(pending)
               .filter((row) => str(row, 'kd_tindakan') && str(row, 'urut_tindakan'))
@@ -3216,9 +3232,9 @@ export function createRanapExecutors(deps: RanapDeps): ExecutorRegistry {
           ? { label: `Transaksi POLI asal lengkap${regs.length > 1 ? ` (${reg})` : ''}`, ok: false, detail: 'tidak ditemukan / data tidak lengkap' }
           : { label: `Transaksi POLI asal ditemukan${regs.length > 1 ? ` (${reg})` : ''}`, ok: true, detail: str(poliSourceByReg[reg], 'no_transaksi') || '-' })),
         // Each planned fix is one line the operator can follow to its approval.
-        ...plans.map((plan): ReasoningItem => ({ label: plan.reason, ok: false, detail: 'perlu dirapikan', planId: plan.id })),
+        ...plans.map((plan): ReasoningItem => ({ label: plan.reason, ok: false, detail: planChange(plan) ?? 'perlu dirapikan', planId: plan.id })),
       ];
-      if (plans.length === 0 && missing.length === 0) poliChecks.push({ label: 'Tagihan poliklinik asal sudah sesuai', ok: true });
+      if (plans.length === 0 && missing.length === 0) poliChecks.push({ label: 'Tagihan poliklinik asal sudah sesuai', ok: true, detail: 'tanggal dan transfer sudah benar, tidak ada yang dirapikan' });
       if (plans.length === 0) {
         if (missing.length > 0) {
           return reasoned(review(`POLI asal tidak ditemukan/lengkap untuk ${missing.length} grup`, {
@@ -3309,6 +3325,7 @@ export function createRanapExecutors(deps: RanapDeps): ExecutorRegistry {
               no_transaksipoli: noTransaksiPoli,
               kd_unit_poli: kdUnitPoli,
               nama_unit: str(row, 'nama_unit'),
+              perubahan: `${str(row, 'nama_unit') || 'Elektromedik'} ${trx}: belum ditransfer → masuk tagihan rawat inap ${noTransaksiPoli}`,
             },
             readAfterWriteChecks: [
               {
@@ -3326,7 +3343,7 @@ export function createRanapExecutors(deps: RanapDeps): ExecutorRegistry {
 
       const emChecks: ReasoningItem[] = [
         ...incomplete.map((trx): ReasoningItem => ({ label: `Elektromedik ${trx} bisa ditransfer`, ok: false, detail: 'data kunjungan / tujuan transfer tidak lengkap' })),
-        ...plans.map((plan): ReasoningItem => ({ label: plan.reason, ok: false, detail: 'belum ditransfer — transfer', planId: plan.id })),
+        ...plans.map((plan): ReasoningItem => ({ label: plan.reason, ok: false, detail: planChange(plan) ?? 'belum ditransfer — transfer', planId: plan.id })),
       ];
       if (plans.length === 0) {
         return reasoned(review(`Data kunjungan elektromedik tidak lengkap untuk ${incomplete.length} transaksi`, {
@@ -3386,7 +3403,7 @@ export function createRanapExecutors(deps: RanapDeps): ExecutorRegistry {
       const hangTitle = 'Transaksi terkait (IGD, poli, penunjang) sudah ditransfer atau dibayar';
       if (hanging.length === 0) {
         ctx.log(bulletLine('Tidak ada transaksi menggantung'));
-        return reasoned(ok('Tidak ada transaksi terkait yang menggantung'), hangTitle, [{ label: 'Tidak ada transaksi menggantung', ok: true }]);
+        return reasoned(ok('Tidak ada transaksi terkait yang menggantung'), hangTitle, [{ label: 'Tidak ada transaksi menggantung', ok: true, detail: `${allRows.length} kunjungan diperiksa (±${toleranceOf(ctx)} hari dari masa rawat) · ${handled.size} transaksi sudah ditangani run ini` }]);
       }
 
       const alerts = alertsOf(ctx);
@@ -3471,7 +3488,7 @@ export function createRanapExecutors(deps: RanapDeps): ExecutorRegistry {
         ];
         for (const [label, blockers] of checks) {
           manualChecks.push(blockers.length === 0
-            ? { label: `Tidak ada transaksi ${label} tertunda${Object.keys(groups).length > 1 ? ` (${reg})` : ''}`, ok: true }
+            ? { label: `Tidak ada transaksi ${label} tertunda${Object.keys(groups).length > 1 ? ` (${reg})` : ''}`, ok: true, detail: `${allRows.length} kunjungan diperiksa, ±${tolerance} hari dari masa rawat` }
             : { label: `Tidak ada transaksi ${label} tertunda${Object.keys(groups).length > 1 ? ` (${reg})` : ''}`, ok: false, detail: `${blockers.length} belum ditransfer: ${[...new Set(blockers.map((row) => str(row, 'nama_unit') || '-'))].join(', ')} — transfer manual di SIMRS` });
           if (blockers.length === 0) continue;
           const transaksi = blockers.map((row) => str(row, 'no_transaksi') || '-');
@@ -3546,7 +3563,7 @@ export function createRanapExecutors(deps: RanapDeps): ExecutorRegistry {
         const blocker = normalizePenunjangBlocker(res);
         const regLabel = regs.length > 1 ? ` (${reg})` : '';
         if (!blocker.hasBlocker) {
-          penChecks.push({ label: `Tidak ada order penunjang tertunda${regLabel}`, ok: true });
+          penChecks.push({ label: `Tidak ada order penunjang tertunda${regLabel}`, ok: true, detail: 'SIMRS (cek transaksi penunjang) tidak melaporkan order belum terlayani / belum transfer' });
           continue;
         }
         const label = penunjangBlockerLabel(blocker);
@@ -3798,6 +3815,7 @@ export function createRanapExecutors(deps: RanapDeps): ExecutorRegistry {
           }
           for (const op of plan.ops) {
             if (op.kind === 'setPelaksana') {
+              const currentName = getKomponenParamedisName(op.row ?? {}, komponenRows, op.kdKomponen ?? '') ?? '';
               const rungs = pelaksanaLadder(ctx, 'sync_tindakan', {
                 line: {
                   noTransaksi: op.noTransaksi,
@@ -3806,13 +3824,12 @@ export function createRanapExecutors(deps: RanapDeps): ExecutorRegistry {
                   kdKomponen: op.kdKomponen ?? '',
                 },
                 desired: op.pelaksana ?? '',
-                currentName:
-                  getKomponenParamedisName(op.row ?? {}, komponenRows, op.kdKomponen ?? '') ?? '',
+                currentName,
                 paramedisOptions,
               });
               if (rungs.length > 1) escalations += 1;
               for (const rung of rungs) {
-                plans.push(tindakanOpPlan(ctx, 'sync_tindakan', plans.length, op, rung));
+                plans.push(tindakanOpPlan(ctx, 'sync_tindakan', plans.length, op, rung, currentName));
               }
               continue;
             }
@@ -3865,7 +3882,7 @@ export function createRanapExecutors(deps: RanapDeps): ExecutorRegistry {
             ? { label: `Tindakan harian ${str(stay, 'nama_unit') || 'ruang'} sesuai`, ok: true }
             : { label: `Tindakan harian ${str(stay, 'nama_unit') || 'ruang'} sesuai`, ok: false, detail: `${fixes.length} perbaikan direncanakan` };
         }),
-        ...plans.map((plan): ReasoningItem => ({ label: plan.reason, ok: false, detail: 'perbaikan', planId: plan.id })),
+        ...plans.map((plan): ReasoningItem => ({ label: plan.reason, ok: false, detail: planChange(plan) ?? 'perbaikan', planId: plan.id })),
       ];
       const tindakanTitle = `Tindakan harian (kamar, visite perawat, dll.) dicocokkan dengan hari rawat · ${stays.length} ruang`;
       if (plans.length === 0) {
@@ -4077,6 +4094,7 @@ export function createRanapExecutors(deps: RanapDeps): ExecutorRegistry {
         for (const op of plan.ops) {
           planIndexBySequence.set(op.sequence, plans.length);
           if (op.kind === 'setPelaksana' && op.urutTindakan) {
+            const currentDoctor = getKomponenParamedisName(op.row ?? {}, komponenFor, op.kdKomponen ?? '') ?? '';
             const rungs = pelaksanaLadder(ctx, 'sync_visite', {
               line: {
                 noTransaksi: op.noTransaksi,
@@ -4085,8 +4103,7 @@ export function createRanapExecutors(deps: RanapDeps): ExecutorRegistry {
                 kdKomponen: op.kdKomponen ?? '',
               },
               desired: op.pelaksana ?? '',
-              currentName:
-                getKomponenParamedisName(op.row ?? {}, komponenFor, op.kdKomponen ?? '') ?? '',
+              currentName: currentDoctor,
               // The same bucket `setPelaksanaOnRow` resolves the desired name
               // from (`_get_spesialis_fallback_kd_unit`, ranap_v3.py:10455): a
               // specialist charge row carries no `kd_unit` of its own, so the
@@ -4097,7 +4114,7 @@ export function createRanapExecutors(deps: RanapDeps): ExecutorRegistry {
             });
             if (rungs.length > 1) escalations += 1;
             for (const rung of rungs) {
-              plans.push(visiteOpPlan(ctx, 'sync_visite', plans.length, op, rung));
+              plans.push(visiteOpPlan(ctx, 'sync_visite', plans.length, op, rung, currentDoctor));
             }
             continue;
           }
@@ -4109,7 +4126,9 @@ export function createRanapExecutors(deps: RanapDeps): ExecutorRegistry {
           for (const item of plan.reasoning.items) {
             const index = item.opSequence !== undefined ? planIndexBySequence.get(item.opSequence) : undefined;
             const planId = index !== undefined ? plans[index]?.id : undefined;
-            reasoningItems.push({ label: `${prefix}${item.label}`, ok: item.ok, ...(item.detail ? { detail: item.detail } : {}), ...(planId ? { planId } : {}) });
+            const change = index !== undefined && plans[index] ? planChange(plans[index]!) : undefined;
+            const detail = [item.detail, change].filter(Boolean).join(' · ');
+            reasoningItems.push({ label: `${prefix}${item.label}`, ok: item.ok, ...(detail ? { detail } : {}), ...(planId ? { planId } : {}) });
           }
         }
       }
@@ -4552,7 +4571,7 @@ export function createRanapExecutors(deps: RanapDeps): ExecutorRegistry {
           ? { label: `Tidak ada blocker verifikasi${regNote}`, ok: false, detail: summary.blocking.slice(0, 3).join('; ') }
           : alerts.hasSyncIssues(reg)
             ? { label: `Sinkronisasi tanpa masalah${regNote}`, ok: false, detail: alerts.getSyncIssueSummary(reg) }
-            : { label: `Tidak ada blocker verifikasi${regNote}`, ok: true });
+            : { label: `Tidak ada blocker verifikasi${regNote}`, ok: true, detail: 'semua langkah sebelumnya tanpa error/peringatan yang menahan verifikasi' });
       }
 
       // The gate is per registration too. `main()` has no run-level gate at all:
@@ -4646,9 +4665,9 @@ export function createRanapExecutors(deps: RanapDeps): ExecutorRegistry {
       }
 
       const recoverTitle = 'Order gizi yang menahan verifikasi dipulihkan';
-      if (plans.length === 0) return reasoned(skipped('Tidak ada blocker gizi yang perlu dipulihkan'), recoverTitle, [{ label: 'Tidak ada blocker gizi', ok: true }]);
+      if (plans.length === 0) return reasoned(skipped('Tidak ada blocker gizi yang perlu dipulihkan'), recoverTitle, [{ label: 'Tidak ada blocker gizi', ok: true, detail: 'tidak ada order gizi yang menahan verifikasi' }]);
       return reasoned(planResult(`Rencana ${plans.length} aksi recovery order gizi`, plans), recoverTitle,
-        plans.map((plan) => ({ label: plan.reason, ok: false, detail: 'pulihkan', planId: plan.id })));
+        plans.map((plan) => ({ label: plan.reason, ok: false, detail: planChange(plan) ?? 'pulihkan', planId: plan.id })));
     },
 
     /**
@@ -5205,6 +5224,7 @@ export function createRanapExecutors(deps: RanapDeps): ExecutorRegistry {
               no_registrasikunjungan: reg,
               grand_total: payload.grandTotalText,
               baris: payload.rowCount,
+              perubahan: `belum dibayar → tampung ${payload.grandTotalText} (${payload.rowCount} baris tindakan)`,
             },
             readAfterWriteChecks: [
               {
@@ -5220,7 +5240,7 @@ export function createRanapExecutors(deps: RanapDeps): ExecutorRegistry {
       }
 
       const tampungChecks: ReasoningItem[] = [
-        ...tampungRegs.map((reg, index): ReasoningItem => ({ label: `Pembayaran registrasi ${reg} ditampung`, ok: false, detail: 'belum — tampung bayar', ...(plans[index] ? { planId: plans[index]!.id } : {}) })),
+        ...tampungRegs.map((reg, index): ReasoningItem => ({ label: `Pembayaran registrasi ${reg} ditampung`, ok: false, detail: (plans[index] && planChange(plans[index]!)) || 'belum — tampung bayar', ...(plans[index] ? { planId: plans[index]!.id } : {}) })),
         ...refusals.map((entry): ReasoningItem => {
           const [reg, ...rest] = entry.split(': ');
           return { label: `Registrasi ${reg} boleh ditampung bayar`, ok: false, detail: rest.join(': ') };
@@ -7067,6 +7087,8 @@ function tindakanOpPlan(
   index: number,
   op: TindakanOp,
   pelaksanaOverride?: PelaksanaRung,
+  /** The charge's performer now, for the "sekarang → seharusnya" line. */
+  currentPelaksana?: string,
 ): MutationPlan {
   const line: TindakanLineKey = {
     no_transaksi: op.noTransaksi,
@@ -7087,6 +7109,8 @@ function tindakanOpPlan(
     ...(op.actionKey ? { action: op.actionKey } : {}),
     ...(op.targetDate ? { tanggal: op.targetDate } : {}),
     ...(op.batchKey ? { batch: op.batchKey } : {}),
+    // What changes, in the operator's words: shown beside the plan in the canvas, log and Inspector.
+    perubahan: describeTindakanOp(pelaksanaOverride ? { ...op, pelaksana: pelaksanaOverride.pelaksana } : op, currentPelaksana),
   };
 
   if (op.kind === 'updateTgl' || op.kind === 'rebalance') {
@@ -7246,6 +7270,8 @@ function visiteOpPlan(
   index: number,
   op: VisiteOp,
   pelaksanaOverride?: PelaksanaRung,
+  /** The charge's doctor now, for the "sekarang → seharusnya" line. */
+  currentPelaksana?: string,
 ): MutationPlan {
   const line: TindakanLineKey = {
     no_transaksi: op.noTransaksi,
@@ -7263,6 +7289,7 @@ function visiteOpPlan(
     no_registrasikunjungan: op.noRegistrasikunjungan,
     urut_tindakan: op.urutTindakan ?? '',
     ...(op.dependsOnSequence ? { depends_on_op: op.dependsOnSequence } : {}),
+    perubahan: describeVisiteOp(pelaksanaOverride ? { ...op, pelaksana: pelaksanaOverride.pelaksana } : op, currentPelaksana),
   };
 
   if (op.kind === 'hapus') {

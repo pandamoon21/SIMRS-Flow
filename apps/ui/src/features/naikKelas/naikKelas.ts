@@ -200,3 +200,14 @@ export function exportTable(rows: readonly NaikKelasRow[]): { header: string[]; 
     widths: COLUMNS.map((c) => c.width),
   };
 }
+
+/** The server's refresh error codes in the operator's words. */
+export function naikKelasErrorText(message: string): string {
+  if (message === 'source_must_be_google_sheets_url') return 'link sumber bukan link Google Sheets';
+  if (message === 'sheet_not_public') return 'sheet tidak bisa dibaca — bagikan sebagai "Siapa saja yang memiliki link"';
+  const http = /^sheet_http_(\d+)$/.exec(message);
+  if (http) return `Google Sheets menjawab HTTP ${http[1]}`;
+  if (/timeout|aborted/i.test(message)) return 'Google Sheets tidak menjawab (cek internet PC server)';
+  if (/fetch failed|ENOTFOUND|ECONN/i.test(message)) return 'PC server tidak bisa menghubungi Google Sheets (cek internet)';
+  return message;
+}

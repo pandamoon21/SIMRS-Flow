@@ -7,6 +7,7 @@
  *   POST /api/auth/logout
  *   GET  /api/auth/me
  *   GET  /api/health
+ *   GET  /api/health/simrs                  can this host reach the SIMRS base URL (no login)
  *   GET  /api/workflows
  *   GET  /api/workflows/:workflowId
  *   GET  /api/rajal/unpaid?from&to[&instalasi&penjamin&unit]  live unpaid-bill batch (No. RM + poli)
@@ -255,6 +256,24 @@ export function buildServer(options: ServerOptions): FastifyInstance {
       buildVersion: process.env.npm_package_version ?? 'development',
       ...hostDetails(options),
     };
+  });
+
+  // Can this host reach SIMRS right now? One plain GET of the base URL (no
+  // login, no cookie): any HTTP answer means the network path and server are up.
+  app.get('/api/health/simrs', async (req, reply) => {
+    if (!requireRead(req, reply)) return reply;
+    const target = safeUrl(options.about?.evomedisBaseUrl);
+    const checkedAt = new Date().toISOString();
+    if (!target) return { configured: false, reachable: false, checkedAt };
+    const started = Date.now();
+    try {
+      const res = await fetch(target, { method: 'GET', redirect: 'manual', signal: AbortSignal.timeout(SIMRS_PROBE_TIMEOUT_MS) });
+      await res.body?.cancel().catch(() => undefined);
+      return { configured: true, reachable: true, status: res.status, ms: Date.now() - started, host: new URL(target).host, checkedAt };
+    } catch (error) {
+      const timedOut = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
+      return { configured: true, reachable: false, ms: Date.now() - started, host: new URL(target).host, checkedAt, error: timedOut ? `tidak menjawab dalam ${SIMRS_PROBE_TIMEOUT_MS / 1000} detik` : 'koneksi ditolak / alamat tidak ditemukan' };
+    }
   });
 
   // Dashboard reads, derived from the audit ledger (see dashboard.ts). A
@@ -706,6 +725,8 @@ export function buildServer(options: ServerOptions): FastifyInstance {
 }
 
 /** Where this host listens, which SIMRS it talks to, and where it keeps files; nothing secret. */
+const SIMRS_PROBE_TIMEOUT_MS = 5000;
+
 function hostDetails(options: ServerOptions) {
   const about = options.about ?? {};
   const evomedis = safeUrl(about.evomedisBaseUrl);
@@ -730,6 +751,8 @@ function hostDetails(options: ServerOptions) {
       naikKelas: about.naikKelasFile ? fileStats(resolve(about.naikKelasFile)) : undefined,
       berkasCacheDir: about.berkasCacheDir ? resolve(about.berkasCacheDir) : undefined,
       berkas: about.berkasCacheDir ? dirStats(resolve(about.berkasCacheDir), '.json') : undefined,
+      notesFile: options.notesFile ? resolve(options.notesFile) : undefined,
+      notes: options.notesFile ? fileStats(resolve(options.notesFile)) : undefined,
     },
     policy: {
       criticalApprovals: options.criticalApprovals ?? 2,
