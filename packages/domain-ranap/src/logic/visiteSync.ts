@@ -2469,7 +2469,7 @@ export function planVisiteSync(args: PlanVisiteSyncArgs): VisiteSyncPlan {
       const held = untouched.find((entry) => entry.row === row || isSameSpesialisRow(entry.row, row));
       if (removal) items.push({ label, ok: false, detail: `dihapus: ${removal.reason ?? ''}`.trim(), opSequence: removal.sequence });
       else if (held) items.push({ label, ok: false, detail: held.reason });
-      else items.push({ label, ok: true });
+      else items.push({ label, ok: true, detail: `tanggal di dalam rawat ${dates[0] ?? '-'} s/d ${dates.at(-1) ?? '-'} · tidak perlu diubah` });
     }
     const name = patientInfo.primaryName || 'dokter pasien';
     const outcome = dpjp as { ok: boolean; detail: string; opSequence?: number } | undefined;
@@ -2480,5 +2480,26 @@ export function planVisiteSync(args: PlanVisiteSyncArgs): VisiteSyncPlan {
       ? `Rawat ${dates.length} hari (${dates[0]}${dates.length > 1 ? ` – ${dates[dates.length - 1]}` : ''})`
       : 'Rentang rawat tidak diketahui';
     return { title, items };
+  }
+}
+
+/** What one planned visite write changes: the charge, its value now → the value it will have. */
+export function describeVisiteOp(op: VisiteOp, currentPelaksana?: string): string {
+  const name = String(op.row?.['nama_tindakan'] ?? '').trim() || op.correctedNamaTindakan || `tindakan ${op.kdTindakan ?? '-'}`;
+  const at = (datetime: string | undefined) => (datetime ?? '').slice(0, 16) || '-';
+  const rp = (n: number | undefined) => (n !== undefined && Number.isFinite(n) ? ` · Rp ${Math.round(n).toLocaleString('id-ID')}` : '');
+  switch (op.kind) {
+    case 'setPelaksana':
+      return `${name}: dokter ${currentPelaksana?.trim() || '(kosong)'} → ${op.pelaksana?.trim() || '(dikosongkan)'}`;
+    case 'hapus':
+      return `${name} tgl ${at(op.tglJam ?? String(op.row?.['tgl_jam'] ?? ''))}: dihapus`;
+    case 'updateTgl':
+      return `${name}: tanggal ${at(String(op.row?.['tgl_jam'] ?? op.tglJam ?? ''))} → ${at(op.targetDatetime)}`;
+    case 'tambah':
+      return `${op.correctedNamaTindakan || name}: ditambahkan${op.targetDatetime ? ` tgl ${at(op.targetDatetime)}` : ''}${rp(op.correctedHarga)}`;
+    case 'repairTarif':
+      return `${name} → ${op.correctedNamaTindakan || name}${op.correctedRoomClass ? ` (${op.correctedRoomClass})` : ''}${rp(op.correctedHarga)}`;
+    case 'relocateRoom':
+      return `${name}: dipindah ke tagihan ruang ${op.noTransaksi}${op.correctedRoomClass ? ` (${op.correctedRoomClass})` : ''}`;
   }
 }

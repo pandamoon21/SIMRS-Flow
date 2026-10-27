@@ -2822,7 +2822,10 @@ describe('rajal safety model', () => {
       (plan) => plan.endpointId === 'kasir.tampungBayar',
     )!;
 
-    expect(payment.payload).toEqual(payment.payloadSummary);
+    // The summary is the payload plus the operator line "sekarang → seharusnya".
+    const { perubahan, ...summaryPayload } = payment.payloadSummary as Record<string, unknown>;
+    expect(payment.payload).toEqual(summaryPayload);
+    expect(perubahan).toMatch(/^belum dibayar → tampung Rp [\d.]+ \(tagihan Rp [\d.]+, \d+ baris\)$/);
     expect(payment.payloadSummary).toMatchObject({
       no_reg: 'REG-RJ-1',
       no_transaksi: '01-200001',

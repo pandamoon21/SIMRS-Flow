@@ -89,7 +89,9 @@ function decisionsOf(nodeId: string, state: RunState, autoRun: boolean): LogDeci
   for (const plan of state.nodes[nodeId]?.proposedMutations ?? []) {
     const outcome = state.mutations[plan.id];
     const status = outcome?.status ?? 'planned';
-    const what = plan.reason || plan.endpointId;
+    // The executor's "sekarang → seharusnya" line (payloadSummary.perubahan) says what the write changes.
+    const change = (plan.payloadSummary as Record<string, unknown> | undefined)?.perubahan;
+    const what = `${plan.reason || plan.endpointId}${typeof change === 'string' && change && !(plan.reason ?? '').includes(change) ? ` (${change})` : ''}`;
     if (status === 'planned') {
       // The orchestrator applies plans only while the run is live (409 run_not_active after).
       const ended = state.status === 'completed' || state.status === 'failed' || state.status === 'cancelled';

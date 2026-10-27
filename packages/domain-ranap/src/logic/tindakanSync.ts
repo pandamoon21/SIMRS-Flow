@@ -2639,3 +2639,29 @@ function maxOf(items: readonly string[]): string {
   for (const item of items) if (item > best) best = item;
   return best;
 }
+
+const rp = (value: string | undefined): string | undefined => {
+  const n = Number(value);
+  return value !== undefined && value.trim() !== '' && Number.isFinite(n) ? `Rp ${Math.round(n).toLocaleString('id-ID')}` : undefined;
+};
+const day = (datetime: string | undefined): string => (datetime ?? '').slice(0, 16) || '-';
+
+/**
+ * What one planned write changes, for the operator: which charge, its value
+ * now and the value it will have ("sekarang → seharusnya"). `currentPelaksana`
+ * is the performer read off the charge's komponen, when known.
+ */
+export function describeTindakanOp(op: TindakanOp, currentPelaksana?: string): string {
+  const name = String(op.row?.['nama_tindakan'] ?? op.namaTindakan ?? '').trim() || `tindakan ${op.kdTindakan ?? '-'}`;
+  switch (op.kind) {
+    case 'updateTgl':
+    case 'rebalance':
+      return `${name}: tanggal ${day(op.tglJam)} → ${day(op.targetDatetime)}`;
+    case 'hapus':
+      return `${name} tgl ${day(op.tglJam)}: dihapus${rp(String(op.row?.['jumlah'] ?? op.row?.['harga'] ?? '')) ? ` (${rp(String(op.row?.['jumlah'] ?? op.row?.['harga'] ?? ''))})` : ''}`;
+    case 'tambah':
+      return `${name}: ditambahkan tgl ${day(op.targetDatetime ?? op.targetDate)}${rp(op.harga) ? ` · ${rp(op.harga)}` : ''}${op.pelaksana ? ` · pelaksana ${op.pelaksana}` : ''}`;
+    case 'setPelaksana':
+      return `${name}: pelaksana ${currentPelaksana?.trim() || '(kosong)'} → ${op.pelaksana?.trim() || '(dikosongkan)'}`;
+  }
+}

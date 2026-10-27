@@ -98,6 +98,8 @@ interface ResolvedRequest {
 function scalarsOf(summary: Record<string, unknown>): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [key, value] of Object.entries(summary)) {
+    // The operator's "sekarang → seharusnya" line is prose, never a request field.
+    if (key === 'perubahan') continue;
     if (typeof value === 'string') out[key] = value;
     else if (typeof value === 'number' || typeof value === 'boolean') out[key] = String(value);
   }

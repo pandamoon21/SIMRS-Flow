@@ -56,7 +56,9 @@ export function decisionTrailOf(node: NodeRuntimeState | undefined, mutations: R
   for (const plan of node.proposedMutations) {
     if (referenced.has(plan.id)) continue;
     const { mark, note } = planMark(mutations[plan.id]);
-    items.push({ mark, text: plan.reason || plan.endpointId, detail: note });
+    // The executor's "sekarang → seharusnya" line, when it recorded one.
+    const change = (plan.payloadSummary as Record<string, unknown> | undefined)?.perubahan;
+    items.push({ mark, text: plan.reason || plan.endpointId, detail: typeof change === 'string' && change ? `${change} · ${note}` : note });
   }
   for (const issue of node.issues) {
     if (issue.severity === 'info') continue;

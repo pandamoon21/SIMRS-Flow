@@ -1669,7 +1669,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
       const unreadable: string[] = [];
       const dropped = new Set<string>();
       const payChecks: ReasoningItem[] = [];
-      const rupiah = (n: number) => `Rp ${Math.round(n).toLocaleString('id-ID')}`;
+      const rupiah = rupiahText;
       const payLabel = (trx: string) => (treatments.length > 1 ? `${trx} · Belum ada pembayaran` : 'Belum ada pembayaran');
       const withPayReasoning = <T extends StepResult>(result: T): T => (payChecks.length
         ? { ...result, evidence: [...(result.evidence ?? []), reasoningEvidence({ title: 'Status bayar dari baris tagihan poliklinik', items: payChecks })] }
@@ -2128,7 +2128,8 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
             },
           ],
           payload,
-          payloadSummary: payload,
+          // What the payment changes, for the operator: the bill and the amount staged.
+          payloadSummary: { ...payload, perubahan: `belum dibayar → tampung ${rupiahText(Number(pay.total ?? 0) - Number(pay.sudah ?? 0))} (tagihan ${rupiahText(Number(pay.total ?? 0))}, ${kasirRows.get(record.no_transaksi)!.length} baris)` },
           requiresApproval: true,
           idempotencyKey: `${ctx.runId}:${record.no_transaksi}`,
           readAfterWriteCheck: {
@@ -2362,7 +2363,7 @@ const RAJAL_CHECKLISTS: Record<string, ChecklistBuilder> = {
   resolveClinics: ({ ctx, result }) => {
     const clinics = get<string[]>(ctx, 'clinics') ?? [];
     return { title: 'Poli yang diproses', items: clinics.length
-      ? clinics.map((clinic): ReasoningItem => ({ label: clinic, ok: true }))
+      ? clinics.map((clinic): ReasoningItem => ({ label: clinic, ok: true, detail: 'dipilih di Setup' }))
       : [{ label: 'Poli terpilih', ok: false, detail: result.summary }] };
   },
   startBatch: ({ ctx }) => ({ title: 'Batch dimulai', items: [
@@ -2426,7 +2427,7 @@ const RAJAL_CHECKLISTS: Record<string, ChecklistBuilder> = {
     items: (result.proposedMutations ?? []).map((plan): ReasoningItem => ({
       label: `Tampung bayar ${String(plan.idempotencyKey ?? plan.id).split(':').pop()}`,
       ok: false,
-      detail: 'belum dibayar → tampung bayar',
+      detail: typeof (plan.payloadSummary as Record<string, unknown> | undefined)?.perubahan === 'string' ? String((plan.payloadSummary as Record<string, unknown>).perubahan) : 'belum dibayar → tampung bayar',
       planId: plan.id,
     })),
   }),
@@ -2535,6 +2536,8 @@ function berkasIndexPayload(noRm: string, date: string): Record<string, string> 
     no_medicalrecord: noRm, kd_jenis: '', reveral_bpjs: '0', page: '1', rows: '20',
   };
 }
+
+const rupiahText = (n: number): string => `Rp ${Math.round(Number.isFinite(n) ? n : 0).toLocaleString('id-ID')}`;
 
 function ok(summary: string, extra?: Partial<StepResult>): StepResult {
   return { status: 'success', summary, ...extra };
