@@ -15,7 +15,7 @@
 import { reasoningOf, type MutationOutcome, type NodeStatus, type ReasoningItem, type RunLogEntry, type RunState, type WorkflowDefinition } from '@simrs-flow/workflow-core';
 import { rankSteps } from '../canvas/flexLayout.js';
 import { logTime } from './logView.js';
-import { durationLabel, runOutcomeOf } from '../run/runStatus.js';
+import { durationLabel, PREVIEW_GATE_LABEL, previewGateStopOf, runOutcomeOf } from '../run/runStatus.js';
 
 export const END_MARK: Partial<Record<NodeStatus, string>> = {
   success: '✓', failed: '✗', blocked: '■', needs_review: '⚠', skipped: '↷', gate_waiting: '⏸', running: '●', retrying: '●', queued: '●',
@@ -44,12 +44,12 @@ export type TermRow =
   | { kind: 'decision'; key: string; decision: LogDecision }
   /** One item of the step's checklist (per kunjungan / pasien in rajal); `title` on the first. */
   | { kind: 'check'; key: string; nodeId: string; item: ReasoningItem; title?: string }
-  | { kind: 'footer'; key: string; status: RunState['status']; done: number; total: number; problems: number; duration: string };
+  | { kind: 'footer'; key: string; status: RunState['status']; previewDone?: boolean; done: number; total: number; problems: number; duration: string };
 
 const TERMINAL_RUN = new Set(['completed', 'failed', 'cancelled']);
 const FOOTER_TEXT: Record<string, string> = { completed: 'SELESAI', failed: 'GAGAL', cancelled: 'DIBATALKAN' };
 export const footerText = (row: Extract<TermRow, { kind: 'footer' }>) =>
-  `════ ${FOOTER_TEXT[row.status] ?? row.status.toUpperCase()} · ${row.done}/${row.total} tahap · ${row.problems} masalah · ${row.duration} ════`;
+  `════ ${row.previewDone ? PREVIEW_GATE_LABEL.toUpperCase() : FOOTER_TEXT[row.status] ?? row.status.toUpperCase()} · ${row.done}/${row.total} tahap · ${row.problems} masalah · ${row.duration} ════`;
 
 /** `[x/y]` order: topological rank, definition order within a rank. */
 export function stepOrder(definition: WorkflowDefinition): Map<string, number> {
@@ -183,7 +183,8 @@ export function terminalRows(definition: WorkflowDefinition, state: RunState | u
   flushRunLines(Number.POSITIVE_INFINITY);
   if (TERMINAL_RUN.has(state.status)) {
     const outcome = runOutcomeOf(state);
-    rows.push({ kind: 'footer', key: 'footer', status: state.status, done: outcome.done, total: outcome.total, problems: outcome.problems, duration: durationLabel(outcome.durationMs) });
+    // A preview held at its gate is the expected end, not a failure: same words as the status badge.
+    rows.push({ kind: 'footer', key: 'footer', status: state.status, ...(previewGateStopOf(state) ? { previewDone: true } : {}), done: outcome.done, total: outcome.total, problems: outcome.problems, duration: durationLabel(outcome.durationMs) });
   }
   return rows;
 }

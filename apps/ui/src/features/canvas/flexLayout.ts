@@ -29,13 +29,14 @@ export const MAX_CHECKS = 5;
 const RULES_SHOWN = 3;
 
 const STEP = { w: 176, h: 46 };
-const CHECK = { w: 172, h: 34 };
+/** Two lines: what was checked, then the value it found (the reason the operator needs). */
+const CHECK = { w: 208, h: 48 };
 const OUTCOME = { w: 156, h: 34 };
 const DIAMOND = { w: 96, h: 44 };
 const JOIN = { w: 8, h: 8 };
 const ROW_GAP = 6;
 /** Vertical (list) block: step and checks share one column, outcomes to its right. */
-const LIST = { step: { w: 232, h: 46 }, check: { w: 232, h: 34 }, outcome: { w: 176, h: 34 }, gapTop: 16, gapRow: 12, gapOut: 22 };
+const LIST = { step: { w: 248, h: 46 }, check: { w: 248, h: 48 }, outcome: { w: 176, h: 34 }, gapTop: 16, gapRow: 12, gapOut: 22 };
 /** Card → chip column, room for the fan-out curves. */
 const GAP_FAN = 40;
 const GAP_OUT = 18;
@@ -52,6 +53,8 @@ const LABEL_PAD = 18;
 const LABEL_H = 18;
 /** Clear space each side of an edge label, so it never touches the nodes it sits between. */
 const LABEL_CLEAR = 14;
+/** Distance between a detouring edge and the nodes it goes around. */
+const DETOUR_CLEAR = 16;
 
 /** What a step's diamond asks: its single fork's label as a question, or the branches side by side. */
 function branchText(forks: ReadonlyArray<{ label?: string; condition?: string }>): string {
@@ -91,6 +94,8 @@ export interface FlexEdge {
   through?: number;
   /** Carries the tree from one folded row to the next: the cross coordinate of the gap it runs along. */
   wrapped?: number;
+  /** Goes around the steps it skips: the cross coordinate of the clear line it runs along. */
+  detour?: number;
 }
 
 export interface FlexLayout {
@@ -153,12 +158,26 @@ export function checksOf(node: NodeRuntimeState | undefined, state: RunState | u
   };
 }
 
+/** A planned fix's detail is "<value> · <plan state>" (decisionTrail.ts): the state alone. */
+export function planNote(detail: string | undefined): string | undefined {
+  return detail?.split(' · ').at(-1);
+}
+
+/** What a chip shows under its label: the value found, without a plan's state (its outcome says that). */
+export function chipDetail(mark: FlexMark, detail: string | undefined): string | undefined {
+  if (!detail) return undefined;
+  if (mark !== 'plan') return detail;
+  const parts = detail.split(' · ');
+  return parts.length > 1 ? parts.slice(0, -1).join(' · ') : undefined;
+}
+
 function outcomeOf(mark: FlexMark, detail: string | undefined, node: NodeRuntimeState | undefined): { tone: OutcomeTone; text: string } | undefined {
   const stopped = node?.status === 'failed' || node?.status === 'blocked';
   // "direncanakan" alone does not say what happens next; the write still waits for an operator.
-  if (mark === 'plan') return { tone: 'plan', text: !detail || detail === 'direncanakan' ? '→ Perbaikan direncanakan' : `→ ${detail}` };
+  // The chip shows the value; the outcome says only what happens next.
+  if (mark === 'plan') { const note = planNote(detail); return { tone: 'plan', text: !note || note === 'direncanakan' ? '→ Perbaikan direncanakan' : `→ ${note}` }; }
   if (mark === 'warn') return { tone: 'warn', text: '⚠ Perlu ditinjau operator' };
-  if (mark === 'fail') return stopped ? { tone: 'stop', text: '■ Berhenti di sini' } : { tone: 'fail', text: detail ?? 'tidak terpenuhi' };
+  if (mark === 'fail') return stopped ? { tone: 'stop', text: '■ Berhenti di sini' } : { tone: 'fail', text: '✗ Tidak terpenuhi, run lanjut' };
   return undefined;
 }
 
@@ -186,6 +205,7 @@ export function buildFlexLayout(
    */
   const listShift = (LIST.gapOut + LIST.outcome.w) / 2;
   const forksOf = (id: string) => definition.edges.filter((e) => e.source === id && (e.type === 'branch' || e.type === 'guard'));
+  const leaf = (id: string) => !definition.edges.some((e) => e.source === id);
 
   const rank = rankSteps(definition);
   const ranks: string[][] = [];
@@ -294,6 +314,11 @@ export function buildFlexLayout(
           previous = chipId;
           cursor += check.main + LIST.gapRow;
         });
+        if (leaf(id)) {
+          // Nothing comes after this step: its list just ends, no dangling join.
+          rankLength = Math.max(rankLength, cursor - LIST.gapRow - mainCursor);
+          continue;
+        }
         const joinMain = chips.length === 0 ? mainCursor + step.main + GAP_RANK : cursor - LIST.gapRow + LIST.gapTop;
         const joinBox = place(joinMain, spine - joinSize.cross / 2, joinSize);
         items.push(forks.length > 0
@@ -311,13 +336,16 @@ export function buildFlexLayout(
       const forks = forksOf(id);
       const joinId = forks.length > 0 ? `${id}::branch` : `${id}::join`;
       const joinBox = place(joinMain, spine - joinSize.cross / 2, joinSize);
-      if (forks.length > 0) {
+      const end = leaf(id);
+      if (end) {
+        // Nothing comes after this step: its rows just end, no dangling join.
+      } else if (forks.length > 0) {
         items.push({ kind: 'branch', id: joinId, stepId: id, text: branchText(forks), ...joinBox });
       } else {
         items.push({ kind: 'join', id: joinId, stepId: id, ...joinBox });
       }
-      tailOf.set(id, joinId);
-      if (chips.length === 0) edges.push({ id: `${id}->${joinId}`, source: id, target: joinId, axis: 'fan', status: flow });
+      if (!end) tailOf.set(id, joinId);
+      if (chips.length === 0 && !end) edges.push({ id: `${id}->${joinId}`, source: id, target: joinId, axis: 'fan', status: flow });
 
       // A stopped step's rows do not carry on to the next step.
       const onward: FlexEdgeStatus = stopped ? 'skipped' : flow;
@@ -336,11 +364,11 @@ export function buildFlexLayout(
           // Centred on its chip's row, so the chip → outcome edge is straight.
           items.push({ kind: 'outcome', id: outcomeId, stepId: id, tone: chip.outcome.tone, text: chip.outcome.text, ...place(outcomeMain, cross + (check.cross - outcome.cross) / 2, outcome) });
           edges.push({ id: `${chipId}->${outcomeId}`, source: chipId, target: outcomeId, axis: 'side', status: 'taken', tone: chip.outcome.tone });
-          if (chip.outcome.tone !== 'stop') edges.push({ id: `${outcomeId}->${joinId}`, source: outcomeId, target: joinId, axis: 'fan', status: onward });
+          if (chip.outcome.tone !== 'stop' && !end) edges.push({ id: `${outcomeId}->${joinId}`, source: outcomeId, target: joinId, axis: 'fan', status: onward });
           return;
         }
         // A row without an outcome runs straight past the empty outcome slot before curving.
-        edges.push({ id: `${chipId}->${joinId}`, source: chipId, target: joinId, axis: 'fan', status: onward, ...(hasOutcome ? { through: columnsEnd } : {}) });
+        if (!end) edges.push({ id: `${chipId}->${joinId}`, source: chipId, target: joinId, axis: 'fan', status: onward, ...(hasOutcome ? { through: columnsEnd } : {}) });
       });
       rankLength = Math.max(rankLength, joinMain + joinSize.main - mainCursor);
     }
@@ -368,6 +396,32 @@ export function buildFlexLayout(
     previousEdge = high + offset;
   });
 
+  /**
+   * An edge that skips steps (check_balance → Ringkasan past the gate,
+   * verifikasi and tampung bayar) would run straight through them. When the
+   * straight line between its ends hits a node, it goes around instead: along
+   * the near outer side of everything between its ends.
+   */
+  const byId = new Map(items.map((item) => [item.id, item]));
+  const rowOfItem = new Map<FlexItem, number>();
+  rowStart.forEach((from, row) => { for (const item of items.slice(from, rowStart[row + 1] ?? items.length)) rowOfItem.set(item, row); });
+  const detourOf = (sourceId: string, targetId: string): number | undefined => {
+    const a = byId.get(sourceId);
+    const b = byId.get(targetId);
+    if (!a || !b) return undefined;
+    const mainOf = (i: FlexItem) => (tb ? [i.y, i.y + i.h] : [i.x, i.x + i.w]) as [number, number];
+    const crossOf = (i: FlexItem) => (tb ? [i.x, i.x + i.w] : [i.y, i.y + i.h]) as [number, number];
+    const from = mainOf(a)[1];
+    const to = mainOf(b)[0];
+    const lineAt = [(crossOf(a)[0] + crossOf(a)[1]) / 2, (crossOf(b)[0] + crossOf(b)[1]) / 2];
+    const [lo, hi] = [Math.min(...lineAt) - 2, Math.max(...lineAt) + 2];
+    const between = items.filter((i) => i !== a && i !== b && rowOfItem.get(i) === rowOfItem.get(a) && mainOf(i)[1] > from && mainOf(i)[0] < to);
+    if (!between.some((i) => crossOf(i)[1] > lo && crossOf(i)[0] < hi)) return undefined;
+    const low = Math.min(...between.map((i) => crossOf(i)[0])) - DETOUR_CLEAR;
+    const high = Math.max(...between.map((i) => crossOf(i)[1])) + DETOUR_CLEAR;
+    return Math.abs(high - lineAt[0]!) <= Math.abs(lineAt[0]! - low) ? high : low;
+  };
+
   // Edges between steps, coloured by what the run actually did.
   for (const edge of definition.edges) {
     const status = state?.edges[edge.id]?.status;
@@ -380,13 +434,16 @@ export function buildFlexLayout(
     const label = spineLabelOf(edge);
     const targetRow = rowOfRank.get(rank.get(edge.target) ?? 0) ?? 0;
     const wrapped = rowOfRank.get(rank.get(edge.source) ?? 0) !== targetRow ? gapBefore[targetRow] : undefined;
-    edges.push({ id: `spine:${edge.id}`, source: tailOf.get(edge.source) ?? edge.source, target: edge.target, axis: 'main', status: flex, ...(label ? { label } : {}), ...(wrapped !== undefined ? { wrapped } : {}) });
+    const from = tailOf.get(edge.source) ?? edge.source;
+    const detour = wrapped === undefined ? detourOf(from, edge.target) : undefined;
+    edges.push({ id: `spine:${edge.id}`, source: from, target: edge.target, axis: 'main', status: flex, ...(label ? { label } : {}), ...(wrapped !== undefined ? { wrapped } : {}), ...(detour !== undefined ? { detour } : {}) });
   }
 
-  const minX = Math.min(...items.map((i) => i.x));
-  const minY = Math.min(...items.map((i) => i.y));
-  const maxX = Math.max(...items.map((i) => i.x + i.w));
-  const maxY = Math.max(...items.map((i) => i.y + i.h));
+  const detours = edges.flatMap((e) => (e.detour === undefined ? [] : [e.detour]));
+  const minX = Math.min(...items.map((i) => i.x), ...(tb ? detours : []));
+  const minY = Math.min(...items.map((i) => i.y), ...(tb ? [] : detours));
+  const maxX = Math.max(...items.map((i) => i.x + i.w), ...(tb ? detours : []));
+  const maxY = Math.max(...items.map((i) => i.y + i.h), ...(tb ? [] : detours));
   return { items, edges, bounds: { x: minX, y: minY, width: maxX - minX, height: maxY - minY } };
 }
 

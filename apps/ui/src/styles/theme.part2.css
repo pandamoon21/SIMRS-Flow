@@ -1748,6 +1748,12 @@ mark { padding: 0 1px; background: var(--warning-soft-bg); color: inherit; box-s
 .flex-join { width: 100%; height: 100%; border-radius: 50%; background: var(--surface-1); border: 2px solid var(--ink-faint); box-sizing: border-box; }
 .flex-join .react-flow__handle { opacity: 0; width: 2px; height: 2px; min-width: 0; min-height: 0; border: 0; }
 .flex-check { cursor: pointer; }
+/* Label, then the value the check found: the reason the operator reads first. */
+.flex-body { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.flex-check .flex-text { -webkit-line-clamp: 1; font-weight: 600; }
+.flex-check .flex-body > .flex-text:only-child { -webkit-line-clamp: 2; }
+.flex-detail { min-width: 0; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; font-size: 10px; color: var(--ink-muted); }
+.flex-check[data-mark='fail'] .flex-detail { color: inherit; }
 .flex-check:hover { border-color: var(--accent-line); }
 .flex-check[data-mark='ok'] { background: var(--success-soft-bg); border-color: var(--success-soft-line); }
 .flex-check[data-mark='fail'] { background: var(--danger-soft-bg); border-color: var(--danger-soft-line); color: var(--danger-soft-ink); }
@@ -2362,6 +2368,7 @@ html[data-vt='theme']::view-transition-new(root) {
 .pl-status[data-status='dilewati'] { background: var(--danger-soft-bg, var(--surface-2)); color: var(--danger); }
 .pl-status[data-status='proses'] { color: var(--accent); }
 .pl-reason { color: var(--ink); overflow-wrap: anywhere; }
+.pl-reason-inline { min-width: 0; flex: 1 1 18ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-muted); }
 .pl-tag { display: inline-block; margin-left: 6px; padding: 0 6px; border: 1px solid var(--warning-soft-line); border-radius: 4px; color: var(--warning); font-size: 11px; }
 .pl-tag.is-write { border-color: var(--write); color: var(--ink); }
 .pl-trail { margin: 2px 0 4px; padding: 0; list-style: none; font: 12px/1.6 'IBM Plex Mono', ui-monospace, monospace; }

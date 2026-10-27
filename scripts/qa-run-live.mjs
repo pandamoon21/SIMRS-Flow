@@ -175,6 +175,29 @@ await sleep(300);
 await clickButton('^Fit$');
 await sleep(900);
 await shot(`${tag}.png`);
+// Optional: the Flexible decision tree and the Log view, each after its own Fit.
+if (args.flex) {
+  await clickButton('^Flexible$');
+  await sleep(1500);
+  if (args.flex === 'lr') { await clickButton('Horizontal$'); await sleep(1500); }
+  await evaluate(`document.querySelector('.run-summary')?.style.setProperty('display', 'none'), 'ok'`);
+  await clickButton('^Fit$');
+  await sleep(1200);
+  await shot(`${tag}-flex.png`);
+  // --clip x,y,w,h[;x,y,w,h…]: magnified crops of the tree (scale 3).
+  for (const [i, spec] of String(args.clip ?? '').split(';').filter(Boolean).entries()) {
+    const [x, y, width, height] = spec.split(',').map(Number);
+    const { data } = await send('Page.captureScreenshot', { format: 'png', clip: { x, y, width, height, scale: 3 } });
+    writeFileSync(join(OUT, `${tag}-flex-clip${i}.png`), Buffer.from(data, 'base64'));
+  }
+}
+if (args.log) {
+  await clickButton('^Log$');
+  await sleep(1500);
+  await shot(`${tag}-log.png`);
+  await clickButton('^Kanvas$');
+  await sleep(800);
+}
 const stopDisabled = await evaluate(`document.querySelector('.run-cancel-btn')?.disabled ?? null`);
 await clickButton('^Center$').catch(() => null); // removed from newer toolbars
 await sleep(700);

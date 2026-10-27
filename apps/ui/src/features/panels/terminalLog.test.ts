@@ -26,6 +26,13 @@ describe('terminal log', () => {
     });
   }
 
+  it('closes a preview held at its gate as "PREVIEW SELESAI", like the status badge, not GAGAL', () => {
+    const state = replay(ranapWorkflow);
+    const held = { ...state, status: 'failed' as const, nodes: { ...state.nodes, final_gate: { ...state.nodes.final_gate!, status: 'blocked' as const } }, gates: { final_gate: state.gates.final_gate ?? ({} as RunState['gates'][string]) } };
+    expect(footerText(terminalRows(ranapWorkflow, held).at(-1) as Extract<TermRow, { kind: 'footer' }>)).toMatch(/^════ PREVIEW SELESAI · /);
+    expect(footerText(terminalRows(ranapWorkflow, { ...held, gates: {} }).at(-1) as Extract<TermRow, { kind: 'footer' }>)).toMatch(/^════ GAGAL · /);
+  });
+
   it('keeps every log message exactly as the executor wrote it, nothing prepended', () => {
     const state = replay(ranapWorkflow);
     const lines = terminalRows(ranapWorkflow, state).filter((row): row is Extract<TermRow, { kind: 'line' }> => row.kind === 'line');

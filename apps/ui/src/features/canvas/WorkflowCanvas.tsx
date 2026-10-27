@@ -15,6 +15,7 @@ import ReactFlow, {
   MiniMap,
   Panel,
   useReactFlow,
+  useUpdateNodeInternals,
   type Edge,
   type Node,
   MarkerType,
@@ -421,7 +422,7 @@ export function WorkflowCanvas({ onReviewNode, onSelectExecutableNode }: Workflo
           targetHandle: across ? 'in-left' : 'in-top',
           type: 'flow',
           ...(edge.label ? { label: edge.label } : {}),
-          data: { vertical: tb, ...(edge.through !== undefined ? { through: edge.through } : {}), ...(edge.wrapped !== undefined ? { wrapped: edge.wrapped } : {}) },
+          data: { vertical: tb, ...(edge.through !== undefined ? { through: edge.through } : {}), ...(edge.wrapped !== undefined ? { wrapped: edge.wrapped } : {}), ...(edge.detour !== undefined ? { detour: edge.detour } : {}) },
           className: `workflow-edge flex-edge flex-edge--${edge.axis} flex-edge--${side ? `side-${edge.tone}` : live ? 'active' : edge.status}`,
           style: { stroke: color },
           markerEnd: { type: MarkerType.ArrowClosed, color, width: 11, height: 11 },
@@ -463,6 +464,16 @@ export function WorkflowCanvas({ onReviewNode, onSelectExecutableNode }: Workflo
     ];
   }, [definition, direction, flexLayout, layout, state]);
   const animated = useAnimatedGraph(nodes, edges, `${prefs.mode}:${direction}:${prefs.fold}`);
+  // Switching Vertikal ↔ Horizontal swaps every node's handles (top/bottom ↔ left/right), and
+  // React Flow keeps the old handle positions until told: edges then hung off a node's top or
+  // vanished. Re-measure once the new handles are mounted.
+  const updateNodeInternals = useUpdateNodeInternals();
+  const nodeIds = useRef<string[]>([]);
+  nodeIds.current = nodes.map((node) => node.id);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => updateNodeInternals(nodeIds.current));
+    return () => cancelAnimationFrame(frame);
+  }, [direction, prefs.mode, updateNodeInternals]);
 
   if (!definition) {
     return <div className="empty">Pilih alur lalu mulai run untuk melihat kanvas.</div>;
