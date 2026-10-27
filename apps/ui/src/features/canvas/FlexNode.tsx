@@ -7,7 +7,7 @@
  */
 import { memo } from 'react';
 import { Handle, Position, type NodeProps } from 'reactflow';
-import type { FlexMark, OutcomeTone } from './flexLayout.js';
+import { chipDetail, type FlexMark, type OutcomeTone } from './flexLayout.js';
 import { TRAIL_MARK } from './WorkflowNode.js';
 
 export type FlexNodeData = { vertical: boolean } & (
@@ -69,11 +69,15 @@ function FlexNodeView({ data }: NodeProps<FlexNodeData>) {
     );
   }
   const mark = data.mark === 'rule' ? '◇' : TRAIL_MARK[data.mark];
+  const shown = chipDetail(data.mark, data.detail);
   return (
     <div className="flex-node flex-check" data-mark={data.mark} title={data.detail ? `${data.text} — ${data.detail}` : data.text} onClick={data.onOpen}>
       {handles}
       <span className="wf-mark" aria-hidden="true">{mark}</span>
-      <span className="flex-text">{data.text}</span>
+      <span className="flex-body">
+        <span className="flex-text">{data.text}</span>
+        {shown ? <span className="flex-detail">{shown}</span> : null}
+      </span>
     </div>
   );
 }

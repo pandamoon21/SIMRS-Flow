@@ -55,7 +55,8 @@ export default defineConfig({
     // Dev UI reachable from other LAN PCs too; it proxies /api to this host.
     host: true,
     proxy: {
-      '/api': 'http://127.0.0.1:4500',
+      // QA_API_PROXY: a second stack (e.g. QA on :4511) beside the operator's own.
+      '/api': process.env.QA_API_PROXY ?? 'http://127.0.0.1:4500',
     },
   },
 });

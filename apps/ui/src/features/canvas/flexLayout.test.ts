@@ -140,7 +140,7 @@ describe('flexible layout stability and shape', () => {
     const [fail, ok] = layout.items.filter((i) => i.kind === 'check' && i.stepId === 'validate_sep');
     const outcome = layout.items.find((i) => i.kind === 'outcome' && i.stepId === 'validate_sep')!;
     // The ✗ continues to its outcome in its own row.
-    expect(outcome.y).toBe(fail!.y);
+    expect(outcome.y + outcome.h / 2).toBe(fail!.y + fail!.h / 2);
     expect(outcome.x).toBeGreaterThan(fail!.x);
     const fan = layout.edges.filter((e) => e.source === 'validate_sep').map((e) => e.target);
     expect(fan).toEqual([fail!.id, ok!.id]);
@@ -194,6 +194,41 @@ describe('flexible layout stability and shape', () => {
     const outcome = layout.items.find((i) => i.kind === 'outcome' && i.stepId === 'validate_sep')!;
     expect(outcome).toMatchObject({ tone: 'stop' });
     expect(layout.edges.some((e) => e.source === outcome.id)).toBe(false);
+  });
+});
+
+describe('flex layout routing', () => {
+  const rect = (i: FlexItem, direction: FlexDirection) => (direction === 'LR' ? { main: [i.x, i.x + i.w], cross: [i.y, i.y + i.h] } : { main: [i.y, i.y + i.h], cross: [i.x, i.x + i.w] });
+  for (const [name, workflow, catalog] of [['ranap', ranapWorkflow, ranapRuleCatalog], ['rajal', rajalWorkflow, rajalRuleCatalog]] as const) {
+    for (const direction of ['TB', 'LR'] as FlexDirection[]) {
+      for (const wrap of [0, 8]) {
+        it(`${name} ${direction} wrap ${wrap}: a step-to-step edge never runs straight through a node`, () => {
+          const layout = buildFlexLayout(workflow, undefined, rulesFor(catalog), direction, wrap);
+          const byId = new Map(layout.items.map((i) => [i.id, i]));
+          for (const edge of layout.edges.filter((e) => e.axis === 'main' && e.wrapped === undefined)) {
+            const a = rect(byId.get(edge.source)!, direction);
+            const b = rect(byId.get(edge.target)!, direction);
+            const centre = (r: typeof a) => (r.cross[0]! + r.cross[1]!) / 2;
+            // A straight run (both ends on one line) is the case a detour exists for.
+            if (edge.detour !== undefined || Math.abs(centre(a) - centre(b)) > 1) continue;
+            for (const item of layout.items) {
+              if (item.id === edge.source || item.id === edge.target) continue;
+              const r = rect(item, direction);
+              const crosses = r.main[0]! > a.main[1]! && r.main[1]! < b.main[0]! && r.cross[0]! < centre(a) && r.cross[1]! > centre(a);
+              expect(crosses, `${edge.id} runs through ${item.id}`).toBe(false);
+            }
+          }
+          if (name === 'ranap') expect(layout.edges.find((e) => e.id.includes('check_balance') && e.target === 'emit_summary')?.detour).toBeDefined();
+        });
+      }
+    }
+  }
+
+  it('ends a step with no next step without a dangling join', () => {
+    const layout = buildFlexLayout(rajalWorkflow, undefined, rulesFor(rajalRuleCatalog), 'LR');
+    expect(layout.items.some((i) => i.id === 'check_berkas::join')).toBe(false);
+    expect(layout.items.some((i) => i.id === 'validate_lab::join')).toBe(true);
+    expect(layout.edges.some((e) => e.target === 'check_berkas::join')).toBe(false);
   });
 });
 

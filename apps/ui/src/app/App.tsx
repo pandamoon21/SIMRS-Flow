@@ -6,7 +6,7 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { ranapWorkflow } from '@simrs-flow/domain-ranap';
 import { rajalWorkflow } from '@simrs-flow/domain-rajal';
-import { mockEventStream } from '@simrs-flow/test-fixtures';
+import { mockEventStream, RAJAL_HAPPY_INPUT, RANAP_HAPPY_INPUT } from '@simrs-flow/test-fixtures';
 import { type ExecutionMode, type WorkflowDefinition, type WorkflowEvent } from '@simrs-flow/workflow-core';
 import type { RunInputResult } from '../features/forms/RunInputForm.js';
 import { useRunStore } from '../store/runStore.js';
@@ -213,7 +213,7 @@ export function App() {
     startOfflineTimer(cursor >= total ? 0 : cursor, total);
   }, [cursor, events.length, startOfflineTimer]);
 
-  const runOffline = useCallback(() => {
+  const runOfflineMock = useCallback(() => {
     const definition = WORKFLOWS[workflowId]!;
     // The fixture takes the IGD branch so the flexible view shows a path taken and one not taken.
     const poli = definition.edges.find((edge) => edge.source === 'detect_origin' && edge.target === 'process_poli');
@@ -228,6 +228,29 @@ export function App() {
     setPage('run');
     startOfflineTimer(0, stream.length);
   }, [loadReplay, mode, startOfflineTimer, workflowId]);
+
+  /**
+   * Data contoh, preview: the real executors on synthetic SIMRS data (the
+   * orchestrator's fixture transport, never SIMRS), so the sample shows what a
+   * live run shows: real log lines, values and reasons, the per-patient view.
+   * The client-side replay stays for write mode and when the orchestrator is unreachable.
+   */
+  const runOffline = useCallback(async () => {
+    if (mode !== 'preview') return runOfflineMock();
+    try {
+      const definition = await api.getWorkflow(workflowId);
+      const { runId: id } = await api.createRun({ workflowId, mode: 'preview', input: definition.domain === 'rajal' ? RAJAL_HAPPY_INPUT : RANAP_HAPPY_INPUT, source: 'fixture' });
+      loadDefinition(definition, 'preview');
+      setRunId(id);
+      setSelectedHistoryRun(undefined);
+      history.replaceState(null, '', `?run=${encodeURIComponent(id)}`);
+      setPage('run');
+      streamRun(id);
+    } catch (error) {
+      if (error instanceof UnauthorizedError) return onUnauthorized();
+      runOfflineMock();
+    }
+  }, [loadDefinition, mode, onUnauthorized, runOfflineMock, streamRun, workflowId]);
 
   const runLive = useCallback(async () => {
     setLiveError(undefined);
@@ -267,7 +290,7 @@ export function App() {
   const start = useCallback(() => {
     if (starting) return;
     setRunNonce((n) => n + 1);
-    if (source === 'offline') runOffline();
+    if (source === 'offline') void runOffline();
     else void runLive();
   }, [runLive, runOffline, source, starting]);
 

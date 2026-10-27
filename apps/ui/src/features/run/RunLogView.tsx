@@ -175,7 +175,7 @@ export function RunLogView({ onApproveGate, onRejectGate, onApproveMutation, onO
           </div>
         );
       case 'footer':
-        return <div key={row.key} data-row={row.key} className={`tl-footer${hit}`} data-status={row.status}>{rowText(row)}</div>;
+        return <div key={row.key} data-row={row.key} className={`tl-footer${hit}`} data-status={row.previewDone ? 'completed' : row.status}>{rowText(row)}</div>;
       case 'check':
         return (
           <div key={row.key} data-row={row.key} className={`tl-check-row${hit}`}>

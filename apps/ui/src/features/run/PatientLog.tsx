@@ -20,11 +20,28 @@ export function filterPatients(rows: readonly PatientTrail[], filter: Filter, qu
     && (!query.trim() || logMatches(`${row.rm} ${row.reason} ${row.step} ${row.trail.map((t) => t.item.label).join(' ')}`, query)));
 }
 
+/** An item's label inside its patient's card: the card header already names the No. RM. */
+export function withoutRm(label: string, rm: string): string {
+  const parts = label.split(' · ').filter((part) => part.trim() !== rm);
+  return parts.length ? parts.join(' · ') : label;
+}
+
+/** What Ringkas keeps of a trail: ✗, planned writes and open (•) items; the ✓ ones become one count. */
+export function compactTrail(trail: PatientTrail['trail']): { shown: PatientTrail['trail']; passed: number } {
+  const shown = trail.filter((t) => t.item.ok !== true || t.item.planId);
+  return { shown, passed: trail.length - shown.length };
+}
+
+/** Above this many patients the list opens in Ringkas. */
+const COMPACT_FROM = 10;
+
 export function PatientLog({ patients, runId, onOpenNode }: { patients: readonly PatientTrail[]; runId?: string; onOpenNode: (nodeId: string) => void }) {
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState<PerPage>(50);
+  const [compactPick, setCompactPick] = useState<boolean>();
+  const compact = compactPick ?? patients.length > COMPACT_FROM;
   const counts = useMemo(() => Object.fromEntries(FILTERS.map(([key]) => [key, filterPatients(patients, key, '').length])), [patients]);
   const rows = useMemo(() => filterPatients(patients, filter, query), [patients, filter, query]);
   const win = pageWindow(rows.length, perPage, page);
@@ -47,32 +64,39 @@ export function PatientLog({ patients, runId, onOpenNode }: { patients: readonly
           ))}
         </div>
         <input className="form-control pl-search" type="search" placeholder="Cari No. RM / no transaksi / alasan…" aria-label="Cari pasien" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} />
+        <Button color={compact ? 'info' : 'secondary'} variant={compact ? undefined : 'outline'} size="sm" aria-pressed={compact} onClick={() => setCompactPick(!compact)} title="Ringkas: satu baris per pasien, hanya cek yang bermasalah / rencana write; cek yang lolos dihitung">Ringkas</Button>
         <Button color="secondary" variant="outline" size="sm" disabled={rows.length === 0} onClick={exportXlsx} title="Unduh daftar pasien sesuai saringan">XLSX</Button>
       </div>
       <Pager label="Navigasi halaman pasien" win={win} total={rows.length} perPage={perPage} onPage={setPage} onPerPage={(next) => { setPerPage(next); setPage(1); }} />
       <div className="pl-scroll">
-        {rows.slice(win.start, win.end).map((row, i) => (
-          <details key={row.rm} className="pl-card" data-status={row.status} open={row.status !== 'lolos' || row.notes > 0 || row.writes > 0}>
-            <summary className="pl-card-head">
-              <span className="pl-no mono">{win.start + i + 1}</span>
-              <b className="mono">{row.rm}</b>
-              <span className="pl-status" data-status={row.status}>{PATIENT_STATUS_LABEL[row.status]}</span>
-              {row.step ? <span className="pl-step">{row.step}</span> : null}
-              {row.notes > 0 ? <span className="pl-tag">{row.notes} catatan</span> : null}
-              {row.writes > 0 ? <span className="pl-tag is-write">{row.writes} rencana write</span> : null}
-              <span className="pl-count tl-muted">{row.trail.length} tahap</span>
-            </summary>
-            {row.reason ? <div className="pl-reason">{row.reason}</div> : null}
-            <ol className="pl-trail">
-              {row.trail.map((t, j) => (
-                <li key={j} className="tl-check" data-ok={String(t.item.ok)} onDoubleClick={() => onOpenNode(t.nodeId)} title="Klik ganda: buka tahap di Inspector">
-                  <span className="tl-mark" aria-hidden="true">{checkMark(t.item)}</span>
-                  <span><span className="tl-step-no">{t.index}/{t.total}</span> <b>{t.label}</b> · {t.item.label}{t.item.detail ? <span className="tl-muted"> — {t.item.detail}</span> : null}</span>
-                </li>
-              ))}
-            </ol>
-          </details>
-        ))}
+        {rows.slice(win.start, win.end).map((row, i) => {
+          const { shown, passed } = compact ? compactTrail(row.trail) : { shown: row.trail, passed: 0 };
+          return (
+            <details key={`${row.rm}:${compact}`} className="pl-card" data-status={row.status} data-compact={compact ? '' : undefined}
+              open={compact ? row.status === 'dilewati' : row.status !== 'lolos' || row.notes > 0 || row.writes > 0}>
+              <summary className="pl-card-head">
+                <span className="pl-no mono">{win.start + i + 1}</span>
+                <b className="mono">{row.rm}</b>
+                <span className="pl-status" data-status={row.status}>{PATIENT_STATUS_LABEL[row.status]}</span>
+                {row.step ? <span className="pl-step">{row.step}</span> : null}
+                {compact && row.reason ? <span className="pl-reason-inline">{row.reason}</span> : null}
+                {row.notes > 0 ? <span className="pl-tag">{row.notes} catatan</span> : null}
+                {row.writes > 0 ? <span className="pl-tag is-write">{row.writes} rencana write</span> : null}
+                <span className="pl-count tl-muted">{row.trail.length} tahap</span>
+              </summary>
+              {row.reason && !compact ? <div className="pl-reason">{row.reason}</div> : null}
+              <ol className="pl-trail">
+                {shown.map((t, j) => (
+                  <li key={j} className="tl-check" data-ok={String(t.item.ok)} onDoubleClick={() => onOpenNode(t.nodeId)} title="Klik ganda: buka tahap di Inspector">
+                    <span className="tl-mark" aria-hidden="true">{checkMark(t.item)}</span>
+                    <span><span className="tl-step-no">{t.index}/{t.total}</span> <b>{t.label}</b> · {withoutRm(t.item.label, row.rm)}{t.item.detail ? <span className="tl-muted"> — {t.item.detail}</span> : null}</span>
+                  </li>
+                ))}
+                {passed > 0 ? <li className="tl-check tl-muted" data-ok="true"><span className="tl-mark" aria-hidden="true">✓</span><span>{passed} cek lain lolos — matikan Ringkas untuk rinciannya</span></li> : null}
+              </ol>
+            </details>
+          );
+        })}
         {rows.length === 0 ? <div className="empty">Tidak ada pasien untuk saringan ini.</div> : null}
       </div>
     </div>
