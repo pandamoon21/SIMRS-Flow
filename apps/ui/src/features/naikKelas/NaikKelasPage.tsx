@@ -25,6 +25,7 @@ import {
   type NaikKelasStatus,
   type SortKey,
   type SortState,
+  naikKelasErrorText,
 } from './naikKelas.js';
 
 function isoDay(d: Date): string {
@@ -196,7 +197,7 @@ export function NaikKelasPage({ onUnauthorized }: NaikKelasPageProps) {
       </header>
 
       {error ? <Alert color="danger">Gagal: {error}. {snapshot ? 'Data tersimpan terakhir tetap ditampilkan.' : 'Pastikan sheet dibagikan “siapa saja yang memiliki link”, atau periksa sumber di Pengaturan lanjutan.'}</Alert> : null}
-      {!error && status?.lastError ? <Alert color="warning">Pembaruan terakhir gagal ({when(status.lastError.at)}: {status.lastError.message}). Data tersimpan sebelumnya tetap ditampilkan.</Alert> : null}
+      {!error && status?.lastError ? <Alert color="warning">Pembaruan terakhir gagal ({when(status.lastError.at)}: {naikKelasErrorText(status.lastError.message)}). Data tersimpan sebelumnya tetap ditampilkan.</Alert> : null}
       {snapshot?.missingColumns.length ? <Alert color="warning">Kolom tidak ditemukan di sheet: {snapshot.missingColumns.join(', ')}. Nilainya tampil kosong — judul kolom di form mungkin berubah.</Alert> : null}
 
       <Row className="g-3">

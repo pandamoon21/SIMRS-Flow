@@ -45,6 +45,23 @@ describe('orchestrator API', () => {
     expect(JSON.stringify(body)).not.toMatch(/cookie|password|token/i);
   });
 
+  it('probes SIMRS reachability without credentials', async () => {
+    const { createServer } = await import('node:http');
+    const simrs = createServer((_req, res) => { res.writeHead(302, { location: '/login' }); res.end(); });
+    await new Promise<void>((done) => simrs.listen(0, '127.0.0.1', done));
+    const port = (simrs.address() as { port: number }).port;
+    const probe = async (baseUrl?: string) => (await buildServer({ ledger: new MemoryLedger(), qaAuth: { token: QA_TOKEN, operator: 'op' }, about: { evomedisBaseUrl: baseUrl } })
+      .inject({ method: 'GET', url: '/api/health/simrs', headers: AUTH })).json() as any;
+    try {
+      expect(await probe(`http://127.0.0.1:${port}/evomedis/`)).toMatchObject({ configured: true, reachable: true, status: 302 });
+      simrs.close();
+      expect(await probe(`http://127.0.0.1:${port}/evomedis/`)).toMatchObject({ configured: true, reachable: false });
+      expect(await probe(undefined)).toMatchObject({ configured: false, reachable: false });
+    } finally {
+      simrs.close();
+    }
+  });
+
   it('root serves an HTML landing page pointing at the UI', async () => {
     const res = await app.inject({ method: 'GET', url: '/' });
     expect(res.statusCode).toBe(200);

@@ -2455,3 +2455,16 @@ html[data-motion='lite'] .login-host-dot { animation: none !important; }
 html[data-motion='off'] *,
 html[data-motion='off'] *::before,
 html[data-motion='off'] *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+
+/* Settings: status first, one tile per thing a run depends on. */
+.settings-checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 12px; }
+.settings-check .badge { white-space: nowrap; }
+.settings-check { display: grid; gap: 4px; align-content: start; padding: 12px 14px; border: 1px solid var(--line); border-left-width: 3px; border-radius: 8px; background: var(--surface-1); }
+.settings-check[data-tone='ok'] { border-left-color: var(--success); }
+.settings-check[data-tone='warn'] { border-left-color: var(--warning); }
+.settings-check[data-tone='bad'] { border-left-color: var(--danger); }
+.settings-check-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.settings-check-title { color: var(--ink-muted); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.settings-check-value { color: var(--ink); font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.settings-tech > summary { cursor: pointer; padding: 12px 16px; font-weight: 600; }
+.settings-tech-body { padding: 0 16px 16px; }

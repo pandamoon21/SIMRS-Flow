@@ -97,8 +97,20 @@ export interface HealthSummary {
     rulesDir?: string; rules?: { files: number; bytes: number };
     naikKelasFile?: string; naikKelas?: { bytes: number; modifiedAt: string };
     berkasCacheDir?: string; berkas?: { files: number; bytes: number };
+    notesFile?: string; notes?: { bytes: number; modifiedAt: string };
   };
   policy?: { criticalApprovals: 1 | 2; autoApproveWrites: boolean; qaLogin: boolean };
+}
+
+/** `GET /api/health/simrs`: one unauthenticated GET of the SIMRS base URL from the host. */
+export interface SimrsReachability {
+  configured: boolean;
+  reachable: boolean;
+  status?: number;
+  ms?: number;
+  host?: string;
+  checkedAt: string;
+  error?: string;
 }
 
 export interface RunSummary {
@@ -257,6 +269,7 @@ export const api = {
     }
   },
   me: () => getJson<{ operator: string }>('/api/auth/me'),
+  simrsHealth: () => getJson<SimrsReachability>('/api/health/simrs'),
 
   // ── Health, workflows & runs ──
   health: () => getJson<HealthSummary>('/api/health'),
