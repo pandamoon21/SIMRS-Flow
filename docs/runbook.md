@@ -168,14 +168,21 @@ choice is remembered per browser.
 
 ## One-patient billing run (target procedure)
 
-> **Live-write status (2026-10).** Non-final writes proven once each with
+> **Live-write status (2026-11).** Non-final writes proven once each with
 > read-after-write PASS via `pilot-live-write.ts`: `rekamMedis.simpanSep`
-> (rajal) and `kasir.updateTglMasuk` (ranap). Final verification and
-> `tampung bayar` (rajal first, then ranap) are **not yet live-proven**. Sites
-> where one operator does the whole patient set `CRITICAL_APPROVALS=1`; the
-> final gates then need one human approval instead of two. Approval, locking,
-> preconditions, read-after-write checks and manual SIMRS comparison remain
-> mandatory for every write.
+> (rajal) and `kasir.updateTglMasuk` (ranap). **Rajal final writes are
+> live-proven** (2026-10-27, auto-approve production mode): 3 MATA patients,
+> 3 `verifikator.simpanVerifikasi` + 3 `kasir.tampungBayar`, all verified
+> read-after-write; SIMRS shows 3 new kwitansi, each equal to its planned
+> payment, status PIUTANG. Ranap so far: 1 patient with Verifikasi off
+> (1 tindakan date + 2 pelaksana, verified); the `tampung_pelaksana`
+> line-total bug it exposed (finding 18) is fixed in #45. Ranap final
+> verification and ranap `tampung bayar` are **not yet live-proven**. Evidence:
+> [`qa/run-e2e-2026-10.md`](qa/run-e2e-2026-10.md) (Live testing,
+> 2026-10-27). Code defaults are `CRITICAL_APPROVALS=1` and
+> `AUTO_APPROVE_WRITES=1` (#35); the final gates then need one human approval
+> instead of two. Approval, locking, preconditions, read-after-write checks and
+> manual SIMRS comparison remain mandatory for every write.
 
 This is the target operating loop for repetitive billing assistance. It is one
 patient/episode per run, not a batch job and not a replacement for SIMRS.
