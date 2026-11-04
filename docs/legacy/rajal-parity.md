@@ -352,8 +352,8 @@ Batch discovery is wired and locked, verification plans carry all read-after-wri
 checks, per-record pruning keeps clean survivors moving without leaking stale
 scratch into payment planning, the legacy payment/shift vocabularies are exposed
 as labels while the run still stores the backend codes, and the regular-lab LIS
-PDF probe is registered and ported. This is not a production live-write or 1:1
-operational completion claim; that still needs the controlled pilot proof below.
+PDF probe is registered and ported. This is not a 1:1 operational completion
+claim; for what live writes have proven so far, see the live boundary below.
 
 ## Diagram branch audit
 
@@ -369,15 +369,21 @@ This table maps readable labels in the [Rajal v1 diagram](../references/evomedis
 
 ## Operational live boundary
 
-Live preview/read evidence exists, but live write parity is not yet proven. The
+Live preview/read evidence exists, and the rajal write path is live-proven: on
+2026-10-27 (auto-approve production mode) 3 MATA patients got 3
+`verifikator.simpanVerifikasi` + 3 `kasir.tampungBayar`, all verified
+read-after-write, and SIMRS showed 3 new kwitansi each equal to its planned
+payment, status PIUTANG. `rekamMedis.simpanSep` was proven earlier via
+`pilot-live-write.ts`. Evidence: [`../qa/run-e2e-2026-10.md`](../qa/run-e2e-2026-10.md)
+(Live testing, 2026-10-27). One sample of 3 patients from one poli is not
+broad parity across every poli and branch. The
 endpoints above are confirmed from the legacy call site and the crawled route
 dumps, and every request shape is pinned by a test. If a live response shape
 differs, the port fails safe: `getdatacarakeluar_tab` returning a non-record
 makes `evaluateRajalExitDateResponse` report `needs_review`, and an unreadable
 discovery report `blocked`s instead of pretending the period is empty. Approved
 rajal writes are executable plans behind the mutation gate's preconditions and
-read-after-write checks, but the full end-to-end claim still requires an
-explicitly authorized one-patient live write pilot plus manual SIMRS
+read-after-write checks; every live write still needs manual SIMRS
 verification.
 
 ## Gap: poli without an SEP mapping

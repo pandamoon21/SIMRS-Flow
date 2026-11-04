@@ -190,4 +190,4 @@ The pilot is **successful** when, for the session's single mutation:
 
 | Date | Run ID | Endpoint | Transaction identity | Machine verdict | Witness verdict | Match | Notes |
 |---|---|---|---|---|---|---|---|
-| — | — | — | — | — | — | — | pilot not yet run |
+| — | — | `rekamMedis.simpanSep` (rajal), `kasir.updateTglMasuk` (ranap) | — | PASS | — | — | Pilot run via `scripts/pilot-live-write.ts`, read-after-write PASS on each; per-run IDs not recorded here. Later production-mode writes (2026-10-27, rajal verifikasi + tampung bayar, ranap non-final): see [`qa/run-e2e-2026-10.md`](qa/run-e2e-2026-10.md). |
