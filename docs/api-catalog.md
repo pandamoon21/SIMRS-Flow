@@ -101,7 +101,7 @@ Ambiguity resolves to `mutate` (fail closed).
 | `kasir.getHistoryPembayaran` | GET | `kasir/kasir/gethistory_pembayaran` | json | Payment history (reject-paid guard). GET: legacy `gethistory_pembayaran_kasir` uses `_get_json`, so the two keys travel as query params, not a form body |
 | `kasir.cekOrderBelumTerlayani` | POST | `kasir/kasir/cek_order_belum_terlayani` | json | Unserved-orders blocker |
 | `kasir.cekOrderBelumTransfer` | POST | `kasir/kasir/cek_order_belum_transfer` | json | Untransferred-orders blocker |
-| `kasir.getRencanaOnko` | POST | `kasir/kasir/get_rencana_onko` | json | Oncology plan for a visit (`{no_registrasikunjungan}`); an `isi_perencanaan` naming chemo abandons the record |
+| `kasir.getRencanaOnko` | POST | `kasir/kasir/get_rencana_onko` | json | Oncology plan for a visit (`{no_registrasikunjungan}`); an `isi_perencanaan` naming chemo abandons the record. **Removed from SIMRS** (404 since 2026-10-27, re-checked 2026-11-09); no workflow calls it — see `docs/risk-register.md` → Accepted gaps |
 | `pendaftaran.getDataKunjungan` | POST | `pendaftaran/pendaftaran_pasien/getdatakunjungan` | json | Registration visit data |
 | `pendaftaran.getDataPenjaminTab` | POST | `pendaftaran/pendaftaran_pasien/getdatapenjamin_tab` | json | Guarantor/insurance tab |
 | `pendaftaran.getRiwayatSep` | POST | `pendaftaran/pendaftaran_pasien/get_datariwayatsep` | json | SEP history by card number |
