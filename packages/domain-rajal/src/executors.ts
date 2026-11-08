@@ -810,7 +810,8 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
     /**
      * Legacy source lines 886-889 read `kasir.getRencanaOnko` to drop chemo-course
      * visits. SIMRS no longer has that page (404 on every registration, checked
-     * live 2026-10-27), and legacy read any failure as "no chemo" — so the check
+     * live 2026-10-27, re-checked 2026-11-09 with no replacement in the kasir,
+     * poliklinik or kemoterapi pages), and legacy read any failure as "no chemo" — so the check
      * had been silently passing everything. The node now says so instead of
      * spending one dead request per patient.
      * ponytail: re-wire `evaluateRajalOncologyPlan` if SIMRS restores the endpoint.

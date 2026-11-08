@@ -138,6 +138,26 @@ so the ledger and any later step can tell a planned write from a landed one.
 | 22 | Two-person approval (critical) | `RunService` requires two distinct operators for `critical` gates *and* for applying a `critical`-risk `MutationPlan` |
 | 23 | Per-user audit identity | Each user logs in with their own EvoMedis account; writes attributed to the real person |
 
+## Accepted gaps
+
+### Rajal chemotherapy check is manual (`rajal.checkRencanaOnko`)
+- **What legacy did:** `rajal_v23.js:886-889` read `kasir/kasir/get_rencana_onko`
+  and skipped a visit whose `isi_perencanaan` mentioned "kemo", so a
+  chemo-course visit was not paid as an ordinary poli visit.
+- **What SIMRS does now:** the route answers 404 (first seen 2026-10-27,
+  re-checked live read-only 2026-11-09). The kasir, poliklinik and kemoterapi
+  pages no longer contain an oncology plan or `isi_perencanaan` field, so there
+  is no replacement endpoint. `kemoterapi/registrasi_pemeriksaan/getjadwal`
+  exists but was empty for six real chemo patients, so it is not a usable signal.
+- **Posture:** the node runs, does not call SIMRS, and reports *"Tidak dicek —
+  … pastikan pasien kemoterapi secara manual"*. The operator checks chemo
+  patients by hand before approving payment.
+- **Not adopted:** holding visits of patients with a KEMOTERAPI registration
+  (readable via `kasir/kasir/getdatakunjungan`, `KEMO` filter). It is a new
+  business rule, not legacy parity, and needs kasir/verifikator sign-off first.
+- **Revisit if:** SIMRS restores an oncology-plan endpoint — re-wire
+  `evaluateRajalOncologyPlan` in `packages/domain-rajal/src/executors.ts`.
+
 ## Dashboard and LAN pilot risks
 
 These risks apply to the planned one-patient-per-run dashboard and must have an

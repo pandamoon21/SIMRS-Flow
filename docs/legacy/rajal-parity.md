@@ -36,7 +36,7 @@ its guards, in execution order.
 | 3 | untransferred penunjang visit (1045) | — | `filter_records` | parity (stricter: see note 1) |
 | 4 | `findMatchingRecords` + `resolveClinicMatch` (728, 293) | — | `filter_records` | **gap closed** |
 | 5 | `getMatchedClinic` ambiguity skip (747) | — | `filter_records` | **gap closed** |
-| 6 | `rencanaOnko` chemo blocker (886) | `kasir/kasir/get_rencana_onko` | `check_rencana_onko` | **gap closed** |
+| 6 | `rencanaOnko` chemo blocker (886) | `kasir/kasir/get_rencana_onko` | `check_rencana_onko` | **unreachable** — route removed from SIMRS; node reports *Tidak dicek* (manual check) |
 | 7 | exit-date hard block (891) | `poliklinik/poliklinik/getdatacarakeluar_tab` | `validate_exit_date` | **gap closed** (real endpoint, substitute dropped) |
 | 8 | rawat-inap rejection (894) | `kasir/kasir/getdatatransaksi` | `validate_transaction` | parity; **payload field fixed** |
 | 9 | `verifyTreatmentGroups` skip list + AND/OR (762) | `kasir/kasir/get_listtindakan` | `validate_treatment` | **gap closed** |
@@ -211,6 +211,11 @@ site *and* against the crawled route dumps in `EvoMedis-Helper`
    missing/non-JSON route is treated the same way legacy's optional chaining did:
    no chemo signal, logged at debug level, and the record continues. The node id
    is unchanged.
+
+   *Superseded 2026-10-27 (#35):* SIMRS removed the route (404 on every
+   registration), so the node no longer calls it and reports *Tidak dicek* —
+   the operator checks chemo patients manually. Re-checked 2026-11-09; see
+   `docs/risk-register.md` → Accepted gaps.
 2. **`validate_exit_date` reads the real endpoint, and its block is a real
    block.** The substitute — `tgl_keluar` off the `gethistorykunjungan` row —
    is gone, and so is `RajalRecordRow.tgl_keluar`; there is no fallback,
