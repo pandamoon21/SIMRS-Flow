@@ -5,7 +5,17 @@ import { rajalWorkflow } from '@simrs-flow/domain-rajal';
 import { ranapWorkflow } from '@simrs-flow/domain-ranap';
 import { RANAP_HAPPY_INPUT } from '@simrs-flow/test-fixtures';
 import { QaTransport, qaFixtures } from './qaTransport.js';
-import { buildServer } from './server.js';
+import { buildServer, createRunService, type ServerOptions } from './server.js';
+import type { RunService } from './RunService.js';
+import { RuleStore } from './rules.js';
+import type { FastifyInstance } from 'fastify';
+
+/** buildServer with an injected RunService wired exactly as the default one. */
+function serverWithService(options: ServerOptions): { app: FastifyInstance; runService: RunService } {
+  const rules = options.rules ?? new RuleStore();
+  const runService = createRunService(options, rules);
+  return { app: buildServer({ ...options, rules, runService }), runService };
+}
 
 const req = (endpointId: string, extra: Partial<TransportRequest> = {}): TransportRequest =>
   ({ url: 'http://x', method: 'POST', headers: { 'x-endpoint-id': endpointId, cookie: 'ci_session=a' }, body: '', timeoutMs: 20, ...extra });
@@ -41,13 +51,13 @@ describe('QA runs through the orchestrator', () => {
   const AUTH = { authorization: 'Bearer t' };
 
   it('runs a 50-patient synthetic rajal batch to one outcome row per patient', async () => {
-    const app = buildServer({ ledger: new MemoryLedger(), qaAuth: { token: 't', operator: 'op' } });
+    const { app, runService: appService } = serverWithService({ ledger: new MemoryLedger(), qaAuth: { token: 't', operator: 'op' } });
     const patientIds = Array.from({ length: 50 }, (_, i) => `0-80-${String(Math.floor(i / 100)).padStart(2, '0')}-${String(i % 100).padStart(2, '0')}`);
     const created = await app.inject({ method: 'POST', url: '/api/runs', headers: AUTH, payload: {
       workflowId: rajalWorkflow.id, mode: 'preview', input: { patientIds, clinics: ['PENYAKIT DALAM'], date: '2026-06-10' }, qa: { scenario: 'rajal-synthetic' },
     } });
     expect(created.statusCode).toBe(201);
-    await (app as any).runService.waitFor(created.json().runId);
+    await appService.waitFor(created.json().runId);
     const { patients } = (await app.inject({ method: 'GET', url: '/api/patients', headers: AUTH })).json();
     expect(patients).toHaveLength(50);
   });
@@ -57,10 +67,10 @@ describe('QA runs through the orchestrator', () => {
     const bad = await qaHost.inject({ method: 'POST', url: '/api/runs', headers: AUTH, payload: { workflowId: ranapWorkflow.id, input: RANAP_HAPPY_INPUT, qa: { scenario: 'nope' } } });
     expect(bad.statusCode).toBe(400);
 
-    const prod = buildServer({ ledger: new MemoryLedger() });
+    const { app: prod, runService: prodService } = serverWithService({ ledger: new MemoryLedger() });
     const ok = await prod.inject({ method: 'POST', url: '/api/runs', payload: { workflowId: ranapWorkflow.id, input: RANAP_HAPPY_INPUT, qa: { scenario: 'nope', faults: [{ kind: 'network' }] } } });
     expect(ok.statusCode).toBe(201);
-    const state = await (prod as any).runService.waitFor(ok.json().runId);
+    const state = (await prodService.waitFor(ok.json().runId)) as any;
     expect(state.nodes.load_visits.status).toBe('success'); // no fault was injected
   });
 });
@@ -68,9 +78,9 @@ describe('QA runs through the orchestrator', () => {
 describe('ranap fails closed when a SIMRS read fails (QA faults)', () => {
   const AUTH = { authorization: 'Bearer t' };
   const run = async (faults: unknown[]) => {
-    const app = buildServer({ ledger: new MemoryLedger(), qaAuth: { token: 't', operator: 'op' } });
+    const { app, runService: appService } = serverWithService({ ledger: new MemoryLedger(), qaAuth: { token: 't', operator: 'op' } });
     const created = await app.inject({ method: 'POST', url: '/api/runs', headers: AUTH, payload: { workflowId: ranapWorkflow.id, mode: 'preview', input: RANAP_HAPPY_INPUT, qa: { faults } } });
-    return (app as any).runService.waitFor(created.json().runId);
+    return appService.waitFor(created.json().runId) as Promise<any>;
   };
 
   it('happy fixture still reaches the final gate', async () => {
@@ -98,12 +108,12 @@ describe('ranap fails closed when a SIMRS read fails (QA faults)', () => {
 
 describe('ranap cleanup-only run (Verifikasi off)', () => {
   it('still produces the Ringkasan summary row', async () => {
-    const app = buildServer({ ledger: new MemoryLedger(), qaAuth: { token: 't', operator: 'op' } });
+    const { app, runService: appService } = serverWithService({ ledger: new MemoryLedger(), qaAuth: { token: 't', operator: 'op' } });
     const created = await app.inject({ method: 'POST', url: '/api/runs', headers: { authorization: 'Bearer t' }, payload: {
       workflowId: ranapWorkflow.id, mode: 'preview', input: RANAP_HAPPY_INPUT,
       enabled: { final_gate: false, execute_verifikasi: false, tampung_bayar: false },
     } });
-    const state = await (app as any).runService.waitFor(created.json().runId);
+    const state = (await appService.waitFor(created.json().runId)) as any;
     expect(state.nodes.tampung_bayar.status).toBe('skipped');
     expect(state.nodes.emit_summary.status).toBe('success');
     expect(state.status).toBe('completed');
@@ -113,12 +123,12 @@ describe('ranap cleanup-only run (Verifikasi off)', () => {
 describe('rajal outcome wording follows the real payment result', () => {
   const AUTH = { authorization: 'Bearer t' };
   const run = async (mode: 'preview' | 'write') => {
-    const app = buildServer({ ledger: new MemoryLedger(), qaAuth: { token: 't', operator: 'op' } });
+    const { app, runService: appService } = serverWithService({ ledger: new MemoryLedger(), qaAuth: { token: 't', operator: 'op' } });
     const created = await app.inject({ method: 'POST', url: '/api/runs', headers: AUTH, payload: {
       workflowId: rajalWorkflow.id, mode, ...(mode === 'write' ? { autoApprove: true } : {}),
       input: { patientIds: ['012345'], clinics: ['PENYAKIT DALAM'], date: '2026-06-10' },
     } });
-    return (app as any).runService.waitFor(created.json().runId);
+    return appService.waitFor(created.json().runId) as Promise<any>;
   };
 
   it('preview says there is nothing to confirm', async () => {
