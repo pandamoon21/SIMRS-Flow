@@ -3,7 +3,7 @@
  * app actually did. No extra SIMRS reads: every figure traces back to a run.
  *
  *  - patients: one row per patient a run processed (ranap: the run's medrec;
- *    rajal: the batch's `rajal.patient-outcomes` rows).
+ *    rajal: the batch's patient-outcome rows, via `readPatientOutcomes`).
  *  - nominal: tampung bayar plans whose read-after-write check passed
  *    (`mutation.verified`); a preview run therefore contributes 0.
  *  - gate: decisions in write runs (preview runs auto-hold every gate).
@@ -12,6 +12,8 @@
  */
 import type { LedgerHistory } from '@simrs-flow/audit-ledger';
 import type { WorkflowEvent } from '@simrs-flow/workflow-core';
+import { RANAP_NODE, RANAP_TITIPAN_EVIDENCE, RANAP_VALID_RM_REASON, readTitipan } from '@simrs-flow/domain-ranap/contract';
+import { readPatientOutcomes, type RajalPatientOutcome } from '@simrs-flow/domain-rajal/contract';
 
 export type PatientCategory = 'titipan' | 'naik_kelas' | 'normal';
 
@@ -64,9 +66,11 @@ export function rupiah(value: unknown): number {
   return text ? Number(text) : 0;
 }
 
+const evidenceListOf = (event: WorkflowEvent): { label?: string; data?: unknown }[] | undefined =>
+  (event.data as { evidence?: { label?: string; data?: unknown }[] } | undefined)?.evidence;
+
 const evidenceOf = (event: WorkflowEvent, label: string): unknown =>
-  ((event.data as { evidence?: { label?: string; data?: unknown }[] } | undefined)?.evidence ?? [])
-    .find((item) => item.label === label)?.data;
+  (evidenceListOf(event) ?? []).find((item) => item.label === label)?.data;
 
 interface PlanLike { id?: string; endpointId?: string; payloadSummary?: Record<string, unknown> }
 
@@ -93,7 +97,7 @@ export function summarizeRun(history: LedgerHistory, naikKelasRm: ReadonlySet<st
   let noRm = '';
   let name = '';
   let titipan = false;
-  let outcomes: { patientId?: string; status?: string; transactions?: string[] }[] = [];
+  let outcomes: Partial<RajalPatientOutcome>[] = [];
 
   for (const event of history.events) {
     const data = event.data as Record<string, unknown> | undefined;
@@ -107,9 +111,9 @@ export function summarizeRun(history: LedgerHistory, naikKelasRm: ReadonlySet<st
       if (event.type === 'gate.approved') { gate.approved += 1; waiting.delete(event.nodeId); }
       if (event.type === 'gate.rejected' || event.type === 'gate.expired') { if (event.type === 'gate.rejected') gate.rejected += 1; waiting.delete(event.nodeId); }
     }
-    if (event.nodeId === 'normalize_input' && event.type === 'node.succeeded' && !noRm) {
+    if (event.nodeId === RANAP_NODE.normalizeInput && event.type === 'node.succeeded' && !noRm) {
       const items = ((evidenceOf(event, 'reasoning') as { items?: { label?: string; detail?: string }[] } | undefined)?.items ?? []);
-      noRm = items.find((item) => item.label === 'Format No RM valid')?.detail ?? '';
+      noRm = items.find((item) => item.label === RANAP_VALID_RM_REASON)?.detail ?? '';
     }
     if (event.type === 'log.appended') {
       const message = event.message ?? '';
@@ -119,13 +123,12 @@ export function summarizeRun(history: LedgerHistory, naikKelasRm: ReadonlySet<st
       const medrec = /untuk no rm (\d-\d{2}-\d{2}-\d{2}) dimulai/i.exec(message);
       if (!noRm && medrec?.[1]) noRm = medrec[1];
     }
-    if (event.nodeId === 'evaluate_titipan' && /^node\.(succeeded|needs_review)$/.test(event.type)) {
-      const rows = evidenceOf(event, 'titipan');
-      titipan = Array.isArray(rows) && rows.some((row) => (row as { isTitipan?: boolean }).isTitipan);
+    if (event.nodeId === RANAP_NODE.evaluateTitipan && /^node\.(succeeded|needs_review)$/.test(event.type)) {
+      titipan = readTitipan(evidenceOf(event, RANAP_TITIPAN_EVIDENCE));
     }
     if (/^node\.(succeeded|needs_review)$/.test(event.type)) {
-      const rows = (evidenceOf(event, 'rajal.patient-outcomes') as { rows?: unknown } | undefined)?.rows;
-      if (Array.isArray(rows)) outcomes = rows as typeof outcomes;
+      const rows = readPatientOutcomes(evidenceListOf(event));
+      if (rows) outcomes = rows;
     }
   }
   if (active) gate.pending += waiting.size;

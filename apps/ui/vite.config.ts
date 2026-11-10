@@ -37,8 +37,14 @@ export default defineConfig({
       '@simrs-flow/berkas': pkg('berkas'),
       '@simrs-flow/test-fixtures': pkg('test-fixtures'),
       '@simrs-flow/evomedis-client': pkg('evomedis-client'),
+      // The UI imports domains only through these light subpaths (no executors).
+      // Subpaths before their package: an alias also matches `<key>/...`.
+      '@simrs-flow/domain-ranap/contract': file('domain-ranap/src/contract.ts'),
       '@simrs-flow/domain-ranap': pkg('domain-ranap'),
+      '@simrs-flow/domain-rajal/contract': file('domain-rajal/src/contract.ts'),
       '@simrs-flow/domain-rajal': pkg('domain-rajal'),
+      // Type-only; aliased for parity, erased from the bundle.
+      '@simrs-flow/api-contract': pkg('api-contract'),
     },
   },
   build: {

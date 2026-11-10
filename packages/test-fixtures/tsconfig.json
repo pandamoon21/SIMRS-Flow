@@ -7,7 +7,9 @@
   },
   "references": [
     { "path": "../workflow-core" },
-    { "path": "../evomedis-client" }
+    { "path": "../evomedis-client" },
+    { "path": "../domain-ranap" },
+    { "path": "../domain-rajal" }
   ],
   "include": ["src/**/*.ts"],
   "exclude": ["**/*.test.ts", "dist"]

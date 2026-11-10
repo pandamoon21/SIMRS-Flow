@@ -1,12 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { ReactFlowProvider } from 'reactflow';
-import type { ExecutionMode, RunState, WorkflowDefinition } from '@simrs-flow/workflow-core';
+import { isTerminalStatus, type ExecutionMode, type RunState, type WorkflowDefinition } from '@simrs-flow/workflow-core';
 import { RunInputForm, type RunInputResult } from '../forms/RunInputForm.js';
 import { RunSpinner, RunTrack, glyphStateOf, trackProgressOf, variantOf } from './RunStatusGlyph.js';
 import { WorkflowCanvas } from '../canvas/WorkflowCanvas.js';
 import { NodeInspector } from '../panels/NodeInspector.js';
 import { RunConsole } from '../panels/RunConsole.js';
-import { berkasProgressOf, cancelButtonLabel, currentNodeOf, attentionOf, PREVIEW_GATE_LABEL, previewGateStopOf, RUN_STATUS_LABEL, TERMINAL_RUN_STATUSES } from './runStatus.js';
+import { berkasProgressOf, cancelButtonLabel, currentNodeOf, attentionOf, PREVIEW_GATE_LABEL, previewGateStopOf, RUN_STATUS_LABEL } from './runStatus.js';
 import { RunSummary } from './RunSummary.js';
 import { RunLogView } from './RunLogView.js';
 import { useRunStore } from '../../store/runStore.js';
@@ -448,7 +448,7 @@ export function RunPage(props: RunPageProps) {
     if (currentNode?.status === 'gate_waiting' && mode !== 'preview') toast('warning', `Gate menunggu persetujuan · ${labelOf(attentionNodeId)}`);
     // focusNode/labelOf are stable in effect: keyed by run + node id only.
   }, [attentionNodeId, historical, runId]);
-  const terminal = Boolean(actualStatus && TERMINAL_RUN_STATUSES.includes(actualStatus));
+  const terminal = Boolean(actualStatus && isTerminalStatus(actualStatus));
   // A new spinner and traveller per run: re-rolled on every Start and on a run opened from History.
   const [variantSeed, setVariantSeed] = useState(() => Math.random());
   useEffect(() => setVariantSeed(Math.random()), [runId, runNonce]);

@@ -4,8 +4,8 @@
  */
 
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
-import { ranapWorkflow } from '@simrs-flow/domain-ranap';
-import { rajalWorkflow } from '@simrs-flow/domain-rajal';
+import { ranapWorkflow } from '@simrs-flow/domain-ranap/contract';
+import { rajalWorkflow } from '@simrs-flow/domain-rajal/contract';
 import { mockEventStream, RAJAL_HAPPY_INPUT, RANAP_HAPPY_INPUT } from '@simrs-flow/test-fixtures';
 import { type ExecutionMode, type WorkflowDefinition, type WorkflowEvent } from '@simrs-flow/workflow-core';
 import type { RunInputResult } from '../features/forms/RunInputForm.js';

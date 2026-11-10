@@ -31,6 +31,16 @@ export interface BerkasProgressPort {
   label: string;
 }
 
+/** Key under which a step's log `data` carries its latest {@link BerkasProgressPort}. */
+export const BERKAS_PROGRESS_KEY = 'berkasProgress';
+
+/** The progress a check_berkas log line carries, or undefined when it carries none. */
+export function readBerkasProgress(logData: unknown): BerkasProgressPort | undefined {
+  const p = (logData as Record<string, unknown> | undefined)?.[BERKAS_PROGRESS_KEY] as Partial<BerkasProgressPort> | undefined;
+  if (!p || typeof p !== 'object' || typeof p.phase !== 'string') return undefined;
+  return { phase: p.phase, done: Number(p.done ?? 0), total: Number(p.total ?? 0), label: String(p.label ?? '') };
+}
+
 export interface BerkasReaderPort {
   read(pdf: Uint8Array, options: { cacheKey: string; onProgress?: (p: BerkasProgressPort) => void; signal?: AbortSignal }): Promise<BerkasReportPort>;
 }

@@ -3,7 +3,8 @@ import { gateActionError, liveStartBlockerOf, runLostMessage, shouldShowWelcome 
 import { dashboardPageHasContext, dashboardShellClassName } from './app/DashboardShell.js';
 import { attentionOf, berkasProgressOf, cancelButtonLabel, currentNodeOf, outcomeDetail, patientOutcomesOf, previewGateStopOf, RUN_STATUS_LABEL } from './features/run/runStatus.js';
 import type { RunState } from '@simrs-flow/workflow-core';
-import { buildRajalInput, buildRanapInput } from './features/forms/RunInputForm.js';
+import { buildRajalInput } from '@simrs-flow/domain-rajal/contract';
+import { buildRanapInput } from '@simrs-flow/domain-ranap/contract';
 
 describe('Dashboard shell', () => {
   it('collapses its grid only while navigation is hidden', () => {

@@ -21,34 +21,35 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import type { RanapInput } from '@simrs-flow/domain-ranap';
+import type { RanapDischargeRow, RunInput } from '@simrs-flow/api-contract';
+import { isIsoDate, splitList, type RunInputResult as DomainRunInputResult } from '@simrs-flow/workflow-core';
 import {
+  buildRajalInput,
   normalizeClinicLabel,
-  normalizeRajalPaymentConfig,
   RAJAL_CLINIC_MAPPING,
   RAJAL_DEFAULT_PAYMENT_CONFIG,
   RAJAL_DEFAULT_SKIP_TREATMENTS,
   RAJAL_INSTALASI_OPTIONS,
+  RAJAL_NODE,
   RAJAL_PAYMENT_TYPE_OPTIONS,
+  RAJAL_PENUNJANG_NODES,
   RAJAL_SHIFT_OPTIONS,
   RAJAL_TREATMENT_TEMPLATES,
   resolveRajalClinicMatch,
-} from '@simrs-flow/domain-rajal';
-import { RANAP_REPORT_PENJAMIN_OPTIONS, type RanapReportFlag } from '@simrs-flow/domain-ranap';
-import type { RajalInput, RajalTreatmentGroup } from '@simrs-flow/domain-rajal';
+  templateRowsToGroups,
+  type RajalDraft,
+  type RequiredLogic,
+  type TreatmentRow,
+} from '@simrs-flow/domain-rajal/contract';
+import { buildRanapInput, clampToleranceDays, RANAP_REPORT_PENJAMIN_OPTIONS, type RanapDraft, type RanapReportFlag } from '@simrs-flow/domain-ranap/contract';
 import { Alert, Badge, Button, Card, CardBody, CardHeader, FormCheck, FormInput, FormLabel, FormSelect, FormTextarea } from '../../ui/primitives.js';
-import { api, type RanapDischargeRow } from '../../api/client.js';
+import { api } from '../../api/client.js';
 import { Icon } from '../../ui/icons.js';
 
 export type RunInputDomain = 'ranap' | 'rajal';
-export type RunInput = RanapInput | RajalInput;
 
-export interface RunInputResult {
-  input?: RunInput;
-  enabled?: Record<string, boolean>;
-  error?: string;
-  summary: string;
-}
+/** What the Setup form hands App: the domain's verdict on the current draft. */
+export type RunInputResult = DomainRunInputResult<RunInput>;
 
 interface RunInputFormProps {
   domain: RunInputDomain;
@@ -59,81 +60,6 @@ interface RunInputFormProps {
    * "No. RM wajib diisi" check must not read as an error of the viewed run.
    */
   viewingRunId?: string;
-}
-
-interface RanapDraft {
-  noRm: string;
-  tanggal: string;
-  toleranceDays: string;
-  acceptedPenjaminKeywords: string;
-  /** Optional run switches; absent means the legacy default (all off). */
-  debugMode?: boolean;
-  skipVerifikasiSep?: boolean;
-  /** Absent/true = verify (legacy default). False runs the checks only: no gate, verification, payment. */
-  enableVerifikasi?: boolean;
-  enableTampungBayar?: boolean;
-  /** Opt-in Kelengkapan Berkas notice (downloads and reads the e-klaim bundle). */
-  cekBerkas?: boolean;
-  userProses?: string;
-}
-
-/** One treatment line in the rajal editors; unticked lines are kept but ignored. */
-export interface TreatmentRow {
-  enabled: boolean;
-  name: string;
-  /** Group letter, only read when the required list is in `group` logic. */
-  group: string;
-}
-
-/**
- * How the required list combines: `or` = any one line is enough, `and` = every
- * line must be billed, `group` = legacy letters (same letter OR, different AND).
- */
-export type RequiredLogic = 'or' | 'and' | 'group';
-
-/** `list` = the operator types No. RM; `discover` = legacy auto-fetch. */
-export type RajalBatchMode = 'list' | 'discover';
-
-interface RajalDraft {
-  /** Absent means `list`, so an older caller keeps the typed-list behaviour. */
-  mode?: RajalBatchMode;
-  patientIds: string;
-  clinics: string;
-  date: string;
-  acceptedPenjaminKeywords: string;
-  tindakanIncludeKeywords: string;
-  tindakanExcludeKeywords: string;
-  tindakanMinCount: string;
-  paymentShift?: string;
-  paymentType?: string;
-  paymentPayerCode?: string;
-  /** Auto-fetch fields; only read when `mode === 'discover'`. */
-  discoverInstalasi?: string;
-  discoverFrom?: string;
-  discoverTo?: string;
-  discoverPenjamin?: string;
-  discoverUnit?: string;
-  discoverMaxPatients?: string;
-  /** List mode: end of the visit range; set by "Ambil dari laporan". Absent = single `date`. */
-  dateTo?: string;
-  /** List-mode fetch scope: every poli in the report, or only the selected chips. */
-  fetchScope?: 'all' | 'selected';
-  /**
-   * The legacy treatment template the operator picked, kept as a group id.
-   * Present only while the textareas still hold exactly the template's rows:
-   * editing them by hand clears it so a stale AND/OR grouping is never applied.
-   */
-  treatmentTemplateId?: string;
-  /** Row editors; when present they replace the free-text keyword fields above. */
-  requiredRows?: TreatmentRow[];
-  requiredLogic?: RequiredLogic;
-  skipRows?: TreatmentRow[];
-  /** Legacy `sepCheckRequired`; absent/true = validate SEP. */
-  sepCheckRequired?: boolean;
-  /** Absent/true = plan `simpan verifikasi` for unverified visits; false drops them instead. */
-  enableVerifikasi?: boolean;
-  /** Absent/true = plan tampung bayar (the workflow's purpose); false = checks only. */
-  enableTampungBayar?: boolean;
 }
 
 const ACCEPTED_PENJAMIN_TEXT = 'BPJS PBI, BPJS NON PBI';
@@ -153,48 +79,12 @@ const LEGACY_CLINICS = [
 const RAJAL_FILTER_KEY = 'simrs-flow.rajal.filters.v1';
 const DEFAULT_RAJAL_REQUIRED_TREATMENTS = 'PENDAFTARAN PASIEN\nBIAYA OBAT';
 
-const RAJAL_PENUNJANG = [
-  { id: 'validate_radiology', label: 'Radiologi' },
-  { id: 'validate_elektromedik', label: 'Elektromedik' },
-  { id: 'validate_lab_pa', label: 'Lab PA' },
-  { id: 'validate_lab', label: 'Lab reguler' },
-];
-
 function todayIso(): string {
   const now = new Date();
   const yyyy = now.getFullYear();
   const mm = String(now.getMonth() + 1).padStart(2, '0');
   const dd = String(now.getDate()).padStart(2, '0');
   return `${yyyy}-${mm}-${dd}`;
-}
-
-export function splitList(value: string): string[] {
-  return value
-    .split(/[\n,]+/)
-    .map((v) => v.trim())
-    .filter(Boolean);
-}
-
-export function isIsoDate(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const [year, month, day] = value.split('-').map(Number);
-  if (!year || !month || !day) return false;
-  const date = new Date(Date.UTC(year, month - 1, day));
-  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
-}
-
-export function clampToleranceDays(value: string): number {
-  if (!value.trim()) return 3;
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return 3;
-  return Math.min(Math.max(Math.trunc(parsed), 0), 14);
-}
-
-function optionalPositiveInteger(value: string): number | undefined {
-  if (!value.trim()) return undefined;
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
-  return Math.trunc(parsed);
 }
 
 function currentCommaToken(value: string): string {
@@ -243,33 +133,7 @@ function openNativePicker(input: HTMLInputElement): void {
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
-const slug = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'tindakan';
-
-/** Required-treatment rows → the executor's AND/OR groups (unticked/blank rows dropped). */
-export function treatmentGroupsFromRows(rows: readonly TreatmentRow[], logic: RequiredLogic): RajalTreatmentGroup[] {
-  const used = new Set<string>();
-  return rows
-    .filter((row) => row.enabled && row.name.trim())
-    .map((row, i) => {
-      let key = slug(row.name);
-      while (used.has(key)) key = `${key}_${i + 1}`;
-      used.add(key);
-      const group = logic === 'or' ? 'A' : logic === 'and' ? LETTERS[i % LETTERS.length]! : (row.group.trim().toUpperCase() || 'A');
-      return { group, key, name: row.name.trim() };
-    });
-}
-
 const linesToRows = (text: string, group = 'A'): TreatmentRow[] => splitList(text).map((name) => ({ enabled: true, name, group }));
-
-/** `A|registration|PENDAFTARAN PASIEN` rows of a legacy template → groups. */
-function templateRowsToGroups(rows: readonly string[]): RajalTreatmentGroup[] {
-  return rows
-    .map((row) => {
-      const [group, key, name] = row.split('|');
-      return group && key && name ? { group, key, name } : undefined;
-    })
-    .filter((entry): entry is RajalTreatmentGroup => entry !== undefined);
-}
 
 function loadSavedRajalFilters(): Partial<RajalDraft> {
   if (typeof localStorage === 'undefined') return {};
@@ -315,188 +179,6 @@ function saveRajalFilters(draft: RajalDraft): void {
     skipRows: draft.skipRows,
   };
   localStorage.setItem(RAJAL_FILTER_KEY, JSON.stringify(saved));
-}
-
-/** Nodes the runner skips when verification is off; their dependants skip with them. */
-export const RANAP_VERIFY_OFF: Record<string, boolean> = { final_gate: false, execute_verifikasi: false, tampung_bayar: false };
-
-export function buildRanapInput(draft: RanapDraft): RunInputResult {
-  const patientIds = splitList(draft.noRm);
-  const noRm = patientIds[0] ?? '';
-  if (patientIds.length === 0) return { error: 'No. RM wajib diisi untuk rawat inap.', summary: 'Ranap belum lengkap' };
-  // The ranap workflow bills ONE patient per run (ranap_v3 main() takes one medrec);
-  // the engine reads only the first id, so a second one would be silently ignored.
-  if (patientIds.length > 1) {
-    return { error: `Rawat inap diproses satu pasien per run — sisakan satu No. RM (${patientIds.length} diisi).`, summary: `Ranap ${patientIds.length} pasien` };
-  }
-  if (!isIsoDate(draft.tanggal)) {
-    return { error: 'Tanggal rawat inap wajib diisi dengan format valid.', summary: `Ranap ${noRm}` };
-  }
-
-  const acceptedPenjaminKeywords = splitList(draft.acceptedPenjaminKeywords);
-  const toleranceDays = clampToleranceDays(draft.toleranceDays);
-  const userProses = (draft.userProses ?? '').trim();
-  const verify = draft.enableVerifikasi !== false;
-  const input: RanapInput = {
-    noRm,
-    patientIds,
-    tanggal: draft.tanggal,
-    toleranceDays,
-    acceptedPenjaminKeywords: acceptedPenjaminKeywords.length ? acceptedPenjaminKeywords : undefined,
-    debugMode: draft.debugMode === true,
-    skipVerifikasiSep: draft.skipVerifikasiSep === true,
-    // Payment is staged only for registrations whose verification was planned, so it follows verification.
-    enableTampungBayar: verify && draft.enableTampungBayar === true,
-    ...(userProses ? { userProses } : {}),
-  };
-  const flags = [
-    draft.debugMode ? 'debug' : '',
-    draft.skipVerifikasiSep ? 'skip SEP' : '',
-    verify ? '' : 'tanpa verifikasi',
-    input.enableTampungBayar ? 'tampung bayar' : '',
-    draft.cekBerkas ? 'cek berkas' : '',
-  ].filter(Boolean);
-  const suffix = flags.length ? ` · ${flags.join(', ')}` : '';
-  return {
-    input,
-    // Checks-only run: the runner skips the gate and everything after it.
-    // The berkas notice is an opt-in node (defaultEnabled false) switched on here.
-    ...(verify && !draft.cekBerkas ? {} : { enabled: { ...(verify ? {} : RANAP_VERIFY_OFF), ...(draft.cekBerkas ? { check_berkas: true } : {}) } }),
-    summary: `Ranap ${patientIds.length} pasien @ ${draft.tanggal} (±${toleranceDays} hari)${suffix}`,
-  };
-}
-
-/** The shared advanced-filter half of both outpatient modes. */
-function rajalTindakanFilters(draft: RajalDraft) {
-  const acceptedPenjaminKeywords = splitList(draft.acceptedPenjaminKeywords);
-  const rowNames = (rows: readonly TreatmentRow[]) => rows.filter((row) => row.enabled && row.name.trim()).map((row) => row.name.trim());
-  const tindakanIncludeKeywords = draft.requiredRows ? rowNames(draft.requiredRows) : splitList(draft.tindakanIncludeKeywords);
-  const tindakanExcludeKeywords = draft.skipRows ? rowNames(draft.skipRows) : splitList(draft.tindakanExcludeKeywords);
-  const template = draft.requiredRows ? undefined : RAJAL_TREATMENT_TEMPLATES.find((item) => item.id === draft.treatmentTemplateId);
-  const rowGroups = draft.requiredRows ? treatmentGroupsFromRows(draft.requiredRows, draft.requiredLogic ?? 'or') : [];
-  const paymentConfig = normalizeRajalPaymentConfig({
-    shift: draft.paymentShift,
-    type: draft.paymentType,
-    payerCode: draft.paymentPayerCode,
-  });
-  return {
-    acceptedPenjaminKeywords: acceptedPenjaminKeywords.length ? acceptedPenjaminKeywords : undefined,
-    tindakanIncludeKeywords: tindakanIncludeKeywords.length ? tindakanIncludeKeywords : undefined,
-    tindakanExcludeKeywords: tindakanExcludeKeywords.length ? tindakanExcludeKeywords : undefined,
-    tindakanMinCount: optionalPositiveInteger(draft.tindakanMinCount),
-    // The template's own rows carry the legacy AND/OR semantics; the free-text
-    // keyword lists above are only a coarse include/exclude. Emitting the
-    // template as `treatmentGroups` is what actually enforces "Pendaftaran AND
-    // Obat" instead of "Pendaftaran OR Obat".
-    ...(template ? { treatmentGroups: templateRowsToGroups(template.rows) } : {}),
-    ...(rowGroups.length ? { treatmentGroups: rowGroups } : {}),
-    ...(tindakanExcludeKeywords.length ? { skipTreatments: tindakanExcludeKeywords } : {}),
-    ...(draft.sepCheckRequired === false ? { sepCheckRequired: false } : {}),
-    ...(draft.enableVerifikasi === false ? { enableVerifikasi: false } : {}),
-    ...(draft.enableTampungBayar === false ? { enableTampungBayar: false } : {}),
-    paymentConfig,
-  };
-}
-
-/** Optional discovery cap; empty or invalid = no limit. */
-export function rajalMaxPatients(value: string | undefined): number | undefined {
-  return optionalPositiveInteger(value ?? '');
-}
-
-/**
- * Legacy `doFetch` (source line 1451) as run input: no `patientIds`, a period
- * and the report filters instead. `date` carries the period start because the
- * rest of the pipeline still uses it as a per-record fallback; the effective
- * range comes from `discovery.from`/`.to`, which is what legacy's `autosaveCfg`
- * copies onto `dateFrom`/`dateTo` (source line 413).
- */
-function buildRajalDiscoveryInput(draft: RajalDraft, enabled: Record<string, boolean>): RunInputResult {
-  const from = (draft.discoverFrom ?? '').trim();
-  const to = (draft.discoverTo ?? '').trim();
-  const maxPatients = rajalMaxPatients(draft.discoverMaxPatients);
-  if (!isIsoDate(from) || !isIsoDate(to)) {
-    return { error: 'Periode cari otomatis wajib diisi dengan format valid.', summary: 'Rajal cari otomatis belum lengkap', enabled };
-  }
-  if (from > to) {
-    return { error: 'Periode cari otomatis terbalik: tanggal awal melewati tanggal akhir.', summary: 'Rajal cari otomatis belum lengkap', enabled };
-  }
-
-  const instalasi = (draft.discoverInstalasi ?? '').trim() || RAJAL_INSTALASI_OPTIONS[0].code;
-  const penjamin = (draft.discoverPenjamin ?? '').trim();
-  const unit = (draft.discoverUnit ?? '').trim();
-  const clinics = splitList(draft.clinics);
-  const input: RajalInput = {
-    ...(clinics.length ? { clinics } : {}),
-    date: from,
-    discovery: {
-      instalasi,
-      from,
-      to,
-      ...(penjamin ? { penjamin } : {}),
-      ...(unit ? { unit } : {}),
-      ...(maxPatients ? { maxPatients } : {}),
-    },
-    ...rajalTindakanFilters(draft),
-  };
-
-  const instalasiLabel = RAJAL_INSTALASI_OPTIONS.find((option) => option.code === instalasi)?.label ?? instalasi;
-  const scope = [
-    instalasiLabel,
-    ...(penjamin ? [`penjamin "${penjamin}"`] : []),
-    ...(unit ? [`unit "${unit}"`] : []),
-    clinics.length ? `${clinics.length} poli dipilih` : 'poli dari laporan',
-  ].join(', ');
-  return {
-    input,
-    enabled,
-    summary: `Rajal cari otomatis ${from} → ${to} · ${scope}${maxPatients ? ` · maks ${maxPatients} pasien` : ''}`,
-  };
-}
-
-export function buildRajalInput(draft: RajalDraft, enabled: Record<string, boolean> = {}): RunInputResult {
-  const result = draft.mode === 'discover' ? buildRajalDiscoveryInput(draft, enabled) : buildRajalListInput(draft, enabled);
-  if (!result.input) return result;
-  const tags = [
-    draft.enableVerifikasi === false ? 'tanpa verifikasi' : '',
-    draft.enableTampungBayar === false ? 'tanpa tampung bayar' : '',
-    enabled.check_berkas ? 'cek berkas' : '',
-  ].filter(Boolean);
-  return tags.length ? { ...result, summary: `${result.summary} · ${tags.join(' · ')}` } : result;
-}
-
-function buildRajalListInput(draft: RajalDraft, enabled: Record<string, boolean>): RunInputResult {
-  const patientIds = splitList(draft.patientIds);
-  const clinics = splitList(draft.clinics);
-  if (patientIds.length === 0) {
-    return { error: 'Minimal satu No. RM wajib diisi untuk rawat jalan.', summary: 'Rajal belum lengkap', enabled };
-  }
-  if (clinics.length === 0) {
-    return { error: 'Minimal satu poli wajib diisi untuk rawat jalan.', summary: `${patientIds.length} pasien`, enabled };
-  }
-  if (!isIsoDate(draft.date)) {
-    return { error: 'Tanggal rawat jalan wajib diisi dengan format valid.', summary: `${patientIds.length} pasien`, enabled };
-  }
-  const dateTo = (draft.dateTo ?? '').trim();
-  if (dateTo && (!isIsoDate(dateTo) || dateTo < draft.date)) {
-    return { error: 'Tanggal sampai harus valid dan tidak sebelum tanggal awal.', summary: `${patientIds.length} pasien`, enabled };
-  }
-  const range = dateTo && dateTo > draft.date;
-
-  const input: RajalInput = {
-    patientIds,
-    clinics,
-    date: draft.date,
-    // Legacy `doFetch` carries the report period as the visit range (source line 413).
-    ...(range ? { dateFrom: draft.date, dateTo } : {}),
-    ...rajalTindakanFilters(draft),
-  };
-  // The mode is named in the badge so it can never be confused with the
-  // discovered batch, which reaches a very different scale.
-  return {
-    input,
-    enabled,
-    summary: `Rajal daftar No. RM · ${patientIds.length} pasien, ${clinics.length} poli @ ${draft.date}${range ? ` → ${dateTo}` : ''}`,
-  };
 }
 
 /**
@@ -680,7 +362,7 @@ export function RunInputForm({ domain, source, onInputChange, viewingRunId }: Ru
     enableTampungBayar: true,
   });
   const [rajalEnabled, setRajalEnabled] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(RAJAL_PENUNJANG.map((item) => [item.id, true])),
+    Object.fromEntries(RAJAL_PENUNJANG_NODES.map((item) => [item.id, true])),
   );
 
   // Live runs pull poli names from the unpaid-bill report (1st of the month →
@@ -969,8 +651,8 @@ export function RunInputForm({ domain, source, onInputChange, viewingRunId }: Ru
             <details className="run-advanced">
               <summary>Advanced outpatient filters</summary>
               <div className="advanced-stack">
-                <div className="toggle-group" role="group" aria-label="Outpatient supporting services"><span className="toggle-group-title">Checks enabled</span><div className="toggle-grid">{RAJAL_PENUNJANG.map((item) => <FormCheck id={`support-${item.id}`} label={item.label} checked={rajalEnabled[item.id] ?? true} key={item.id} onChange={(c) => setRajalEnabled((value) => ({ ...value, [item.id]: c }))} />)}<FormCheck id="rajal-sep-check" label="Validasi SEP" title="Legacy sepCheckRequired: cocokkan SEP RJTL hari yang sama. Matikan untuk melewati cek SEP." checked={rajal.sepCheckRequired !== false} onChange={(c) => setRajal((value) => ({ ...value, sepCheckRequired: c }))} />
-                  <FormCheck id="rajal-cek-berkas" label="Cek kelengkapan berkas (OCR)" title={source !== 'live' ? 'Butuh sumber Live SIMRS (berkas e-klaim diunduh dari SIMRS)' : 'Unduh berkas e-klaim tiap kunjungan dan cari dokumen wajib: SEP, lembar verifikasi rawat jalan, rincian biaya, hasil rontgen/EKG bila ditagihkan. Hanya notice, tidak memblokir.'} checked={rajalEnabled.check_berkas === true} onChange={(c) => setRajalEnabled((value) => ({ ...value, check_berkas: c }))} /></div></div>
+                <div className="toggle-group" role="group" aria-label="Outpatient supporting services"><span className="toggle-group-title">Checks enabled</span><div className="toggle-grid">{RAJAL_PENUNJANG_NODES.map((item) => <FormCheck id={`support-${item.id}`} label={item.label} checked={rajalEnabled[item.id] ?? true} key={item.id} onChange={(c) => setRajalEnabled((value) => ({ ...value, [item.id]: c }))} />)}<FormCheck id="rajal-sep-check" label="Validasi SEP" title="Legacy sepCheckRequired: cocokkan SEP RJTL hari yang sama. Matikan untuk melewati cek SEP." checked={rajal.sepCheckRequired !== false} onChange={(c) => setRajal((value) => ({ ...value, sepCheckRequired: c }))} />
+                  <FormCheck id="rajal-cek-berkas" label="Cek kelengkapan berkas (OCR)" title={source !== 'live' ? 'Butuh sumber Live SIMRS (berkas e-klaim diunduh dari SIMRS)' : 'Unduh berkas e-klaim tiap kunjungan dan cari dokumen wajib: SEP, lembar verifikasi rawat jalan, rincian biaya, hasil rontgen/EKG bila ditagihkan. Hanya notice, tidak memblokir.'} checked={rajalEnabled[RAJAL_NODE.checkBerkas] === true} onChange={(c) => setRajalEnabled((value) => ({ ...value, [RAJAL_NODE.checkBerkas]: c }))} /></div></div>
                 <div className="run-input-grid advanced-inputs"><div className="run-field wide"><FormLabel htmlFor="rajal-guarantor">Penjamin diterima</FormLabel><FormInput id="rajal-guarantor" value={rajal.acceptedPenjaminKeywords} onChange={(event) => setRajal((value) => ({ ...value, acceptedPenjaminKeywords: event.target.value }))} /></div><div className="run-field"><FormLabel htmlFor="rajal-min-actions">Minimal tindakan</FormLabel><FormInput id="rajal-min-actions" type="number" min={1} value={rajal.tindakanMinCount} onChange={(event) => setRajal((value) => ({ ...value, tindakanMinCount: event.target.value }))} placeholder="optional" /></div></div>
                 <div className="run-input-grid advanced-inputs"><div className="run-field"><FormLabel htmlFor="rajal-payment-shift">Shift bayar</FormLabel><FormSelect id="rajal-payment-shift" value={rajal.paymentShift ?? RAJAL_DEFAULT_PAYMENT_CONFIG.shift} onChange={(event) => setRajal((value) => ({ ...value, paymentShift: event.target.value }))}>{RAJAL_SHIFT_OPTIONS.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}</FormSelect></div><div className="run-field"><FormLabel htmlFor="rajal-payment-type">Jenis bayar</FormLabel><FormSelect id="rajal-payment-type" value={rajal.paymentType ?? RAJAL_DEFAULT_PAYMENT_CONFIG.type} onChange={(event) => setRajal((value) => ({ ...value, paymentType: event.target.value }))}>{RAJAL_PAYMENT_TYPE_OPTIONS.map((option) => <option key={option.code} value={option.code}>{option.label} · {option.code}</option>)}</FormSelect></div><div className="run-field"><FormLabel htmlFor="rajal-payment-payer">Kode penjamin bayar</FormLabel><FormInput id="rajal-payment-payer" value={rajal.paymentPayerCode ?? ''} onChange={(event) => setRajal((value) => ({ ...value, paymentPayerCode: event.target.value }))} /><small>Default {RAJAL_DEFAULT_PAYMENT_CONFIG.payerCode}; masuk ke kd_penjamin.</small></div></div>
                 <div className="template-row" role="group" aria-label="Required treatment templates">{RAJAL_TREATMENT_TEMPLATES.map((template) => <Button color="secondary" variant="outline" size="sm" key={template.id} type="button" aria-pressed={rajal.treatmentTemplateId === template.id} onClick={() => setRajal((value) => ({ ...value, treatmentTemplateId: template.id, requiredLogic: 'group', requiredRows: templateRowsToGroups(template.rows).map((g) => ({ enabled: true, name: g.name, group: g.group })) }))}>{template.label}</Button>)}</div>

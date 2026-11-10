@@ -12,7 +12,7 @@
  * at a time); a step that has not started yet is not in the log. Run-level
  * lines (no node) sit where their seq falls between the step blocks.
  */
-import { reasoningOf, type MutationOutcome, type NodeStatus, type ReasoningItem, type RunLogEntry, type RunState, type WorkflowDefinition } from '@simrs-flow/workflow-core';
+import { isTerminalStatus, reasoningOf, type MutationOutcome, type NodeStatus, type ReasoningItem, type RunLogEntry, type RunState, type WorkflowDefinition } from '@simrs-flow/workflow-core';
 import { rankSteps } from '../canvas/flexLayout.js';
 import { logTime } from './logView.js';
 import { durationLabel, PREVIEW_GATE_LABEL, previewGateStopOf, runOutcomeOf } from '../run/runStatus.js';
@@ -46,7 +46,6 @@ export type TermRow =
   | { kind: 'check'; key: string; nodeId: string; item: ReasoningItem; title?: string }
   | { kind: 'footer'; key: string; status: RunState['status']; previewDone?: boolean; done: number; total: number; problems: number; duration: string };
 
-const TERMINAL_RUN = new Set(['completed', 'failed', 'cancelled']);
 const FOOTER_TEXT: Record<string, string> = { completed: 'SELESAI', failed: 'GAGAL', cancelled: 'DIBATALKAN' };
 export const footerText = (row: Extract<TermRow, { kind: 'footer' }>) =>
   `════ ${row.previewDone ? PREVIEW_GATE_LABEL.toUpperCase() : FOOTER_TEXT[row.status] ?? row.status.toUpperCase()} · ${row.done}/${row.total} tahap · ${row.problems} masalah · ${row.duration} ════`;
@@ -183,7 +182,7 @@ export function terminalRows(definition: WorkflowDefinition, state: RunState | u
     });
   }
   flushRunLines(Number.POSITIVE_INFINITY);
-  if (TERMINAL_RUN.has(state.status)) {
+  if (isTerminalStatus(state.status)) {
     const outcome = runOutcomeOf(state);
     // A preview held at its gate is the expected end, not a failure: same words as the status badge.
     rows.push({ kind: 'footer', key: 'footer', status: state.status, ...(previewGateStopOf(state) ? { previewDone: true } : {}), done: outcome.done, total: outcome.total, problems: outcome.problems, duration: durationLabel(outcome.durationMs) });
@@ -347,7 +346,7 @@ export function patientTrails(definition: WorkflowDefinition, state: RunState | 
       trail.push({ nodeId: node.id, index: order.get(node.id) ?? 0, total, label: node.label, item });
     }
   }
-  const ended = TERMINAL_RUN.has(state.status);
+  const ended = isTerminalStatus(state.status);
   const bad = (t: TrailItem) => t.item.ok === false && !t.item.planId;
   const why = (t: TrailItem) => t.item.detail || t.item.label;
   return [...byRm].map(([rm, trail]) => {

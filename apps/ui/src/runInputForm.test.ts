@@ -1,19 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { RAJAL_DEFAULT_PAYMENT_CONFIG } from '@simrs-flow/domain-rajal';
+import { splitList } from '@simrs-flow/workflow-core';
+import { buildRajalInput, rajalMaxPatients, treatmentGroupsFromRows } from '@simrs-flow/domain-rajal/contract';
+import { buildRanapInput, clampToleranceDays, RANAP_VERIFY_OFF } from '@simrs-flow/domain-ranap/contract';
 import {
-  buildRajalInput,
-  buildRanapInput,
-  clampToleranceDays,
   filterClinicOptions,
   mergeClinicOptions,
   applyRajalFetch,
   removeClinic,
   keepPatientsForClinics,
   rmMatches,
-  RANAP_VERIFY_OFF,
-  rajalMaxPatients,
-  splitList,
-  treatmentGroupsFromRows,
 } from './features/forms/RunInputForm.js';
 
 describe('RunInputForm helpers', () => {

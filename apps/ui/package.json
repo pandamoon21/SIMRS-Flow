@@ -11,6 +11,9 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@simrs-flow/api-contract": "0.1.0",
+    "@simrs-flow/domain-rajal": "0.1.0",
+    "@simrs-flow/domain-ranap": "0.1.0",
     "@simrs-flow/test-fixtures": "0.1.0",
     "@simrs-flow/workflow-core": "0.1.0",
     "react": "^18.3.1",

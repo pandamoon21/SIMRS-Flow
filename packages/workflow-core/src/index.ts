@@ -46,4 +46,6 @@ export type {
 } from './runner.js';
 export { eventsToJsonl, jsonlToEvents, replayJsonl } from './jsonl.js';
 export { REASONING_LABEL, reasoningEvidence, reasoningOf } from './reasoning.js';
+export { isIsoDate, optionalPositiveInteger, splitList } from './runInput.js';
+export type { RunInputResult } from './runInput.js';
 export type { Reasoning, ReasoningItem } from './reasoning.js';

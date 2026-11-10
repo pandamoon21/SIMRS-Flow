@@ -4,12 +4,13 @@
  */
 
 import type { FixtureEntry } from '@simrs-flow/evomedis-client';
+import type { RajalInput } from '@simrs-flow/domain-rajal/contract';
 
 export const RAJAL_HAPPY_INPUT = {
   patientIds: ['012345'],
   clinics: ['PENYAKIT DALAM'],
   date: '2026-06-10',
-};
+} satisfies RajalInput;
 
 /**
  * The same run started by auto-fetch instead of a typed list: no `patientIds`,
@@ -26,7 +27,7 @@ export const RAJAL_DISCOVERY_INPUT = {
     penjamin: 'BPJS',
     maxPatients: 5,
   },
-};
+} satisfies RajalInput;
 
 const historyRows = [
   {

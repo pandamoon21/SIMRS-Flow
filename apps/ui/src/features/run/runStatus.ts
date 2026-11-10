@@ -4,6 +4,8 @@
  */
 
 import type { NodeStatus, RunState, RunStatus } from '@simrs-flow/workflow-core';
+import { RANAP_NEXT_ACTION, RANAP_NODE, readBerkasProgress } from '@simrs-flow/domain-ranap/contract';
+import { RAJAL_NEXT_ACTION, RAJAL_NODE, readPatientOutcomes, type RajalPatientOutcome } from '@simrs-flow/domain-rajal/contract';
 import { stepProgress } from '../panels/logView.js';
 
 /**
@@ -79,13 +81,16 @@ export interface BerkasProgressView {
  * `berkasProgress` the step logged (unduh → teks → OCR n/m). Undefined when the
  * step is not running.
  */
+/** Both domains name the Kelengkapan Berkas step alike; this fails to compile if they ever diverge. */
+const CHECK_BERKAS: typeof RANAP_NODE.checkBerkas = RAJAL_NODE.checkBerkas;
+
 export function berkasProgressOf(state?: Pick<RunState, 'nodes' | 'logs'> & { status?: RunState['status'] }): BerkasProgressView | undefined {
   // A run that ended (or was lost) mid-step leaves the node "running"; the chip must not.
-  if (state?.nodes.check_berkas?.status !== 'running' || (state.status && state.status !== 'running')) return undefined;
+  if (state?.nodes[CHECK_BERKAS]?.status !== 'running' || (state.status && state.status !== 'running')) return undefined;
   for (let i = state.logs.length - 1; i >= 0; i--) {
     const log = state.logs[i]!;
-    if (log.nodeId !== 'check_berkas') continue;
-    const p = (log.data as { berkasProgress?: { phase: string; done: number; total: number; label: string } } | undefined)?.berkasProgress;
+    if (log.nodeId !== CHECK_BERKAS) continue;
+    const p = readBerkasProgress(log.data);
     if (!p) continue;
     const percent = p.phase === 'ocr' && p.total > 0 ? Math.round((p.done / p.total) * 100) : p.phase === 'selesai' ? 100 : undefined;
     return { phase: p.phase, label: p.label, ...(percent !== undefined ? { percent } : {}) };
@@ -93,14 +98,8 @@ export function berkasProgressOf(state?: Pick<RunState, 'nodes' | 'logs'> & { st
   return { phase: 'mulai', label: 'mencari berkas e-klaim…' };
 }
 
-export interface PatientOutcome {
-  patientId: string;
-  status: 'lolos' | 'dilewati';
-  clinics: string[];
-  transactions?: string[];
-  step?: string;
-  reason: string;
-}
+/** A rajal outcome row; `transactions` is optional because rows logged before it existed lack it. */
+export type PatientOutcome = Omit<RajalPatientOutcome, 'transactions'> & { transactions?: string[] };
 
 /**
  * The specific reason a skipped patient left the batch: the shortest clause of
@@ -117,9 +116,8 @@ export function outcomeDetail(state: Pick<RunState, 'nodes'> | undefined, row: P
 /** Per-patient result of a batch run (rajal `emit_batch_summary` evidence); empty when the run has none. */
 export function patientOutcomesOf(state?: Pick<RunState, 'nodes'>): PatientOutcome[] {
   for (const node of Object.values(state?.nodes ?? {})) {
-    const found = node.evidence?.find((item) => item.label === 'rajal.patient-outcomes');
-    const rows = (found?.data as { rows?: unknown } | undefined)?.rows;
-    if (Array.isArray(rows)) return rows as PatientOutcome[];
+    const rows = readPatientOutcomes(node.evidence);
+    if (rows) return rows;
   }
   return [];
 }
@@ -183,28 +181,13 @@ export function durationLabel(ms: number): string {
   return `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`;
 }
 
-export const TERMINAL_RUN_STATUSES: ReadonlyArray<RunStatus> = ['completed', 'failed', 'cancelled'];
-
 /**
  * What the operator does next when a run stops at a node. The node's own summary
  * says *what* is wrong; this says *what to do*. Steps not listed fall back to the
  * generic advice.
  */
-const NEXT_ACTION: Record<string, string> = {
-  normalize_input: 'Perbaiki No RM / tanggal di Setup, lalu mulai run lagi.',
-  normalize_ids: 'Perbaiki daftar No RM di Setup, lalu mulai run lagi.',
-  load_visits: 'Pastikan pasien punya kunjungan rawat inap pada tanggal itu di SIMRS.',
-  reject_verified: 'Transaksi sudah diverifikasi — tidak perlu diproses lagi. Jika SIMRS sedang lambat, jalankan ulang.',
-  reject_paid: 'Kunjungan sudah punya riwayat pembayaran — cek di menu Kasir. Jika SIMRS sedang lambat, jalankan ulang.',
-  validate_sep: 'Cek SEP pasien di menu Pendaftaran SIMRS (tanggal masuk dan PPK), perbaiki, lalu jalankan ulang.',
-  preverify_summary: 'Buka langkah bertanda kuning/merah sebelum ini, selesaikan di SIMRS, lalu jalankan ulang.',
-  check_balance: 'Bandingkan grand total kasir dengan rekapitulasi di SIMRS, rapikan selisihnya, lalu jalankan ulang.',
-  final_gate: 'Tinjau rencana di Inspector, lalu setujui atau tolak.',
-  resolve_clinics: 'Pilih poli yang dikenal di Setup, lalu mulai run lagi.',
-  load_history: 'Pastikan No RM benar dan pasien punya kunjungan rawat jalan pada tanggal itu.',
-  validate_exit_date: 'Isi tanggal keluar kunjungan di menu Poliklinik SIMRS, lalu jalankan ulang.',
-  check_verification: 'Selesaikan order yang belum terlayani / belum ditransfer di SIMRS, lalu jalankan ulang.',
-};
+// Domain advice keyed by node id; ranap wins on shared ids (validate_sep), as before.
+const NEXT_ACTION: Readonly<Record<string, string>> = { ...RAJAL_NEXT_ACTION, ...RANAP_NEXT_ACTION };
 
 export function nextActionOf(nodeId: string): string {
   return NEXT_ACTION[nodeId] ?? 'Buka langkah ini di Inspector untuk detailnya; selesaikan di SIMRS lalu jalankan ulang.';

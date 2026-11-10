@@ -1,7 +1,7 @@
 import { Fragment, useMemo, useState, type ReactNode } from 'react';
 import type { RuleCatalog, StepStatus, WorkflowDefinition } from '@simrs-flow/workflow-core';
-import { ranapRuleCatalog, ranapWorkflow } from '@simrs-flow/domain-ranap';
-import { rajalRuleCatalog, rajalWorkflow } from '@simrs-flow/domain-rajal';
+import { ranapRuleCatalog, ranapWorkflow } from '@simrs-flow/domain-ranap/contract';
+import { rajalRuleCatalog, rajalWorkflow } from '@simrs-flow/domain-rajal/contract';
 import { Alert, Badge, Button, ButtonGroup, Card, CardBody, FormCheck, FormInput, type Tone } from '../../ui/primitives.js';
 import { buildRuleSections, ruleRowMatches, writesWithoutReason, type RuleRow } from './ruleCatalog.js';
 import { RuleEditor } from './RuleEditor.js';

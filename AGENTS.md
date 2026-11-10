@@ -57,6 +57,8 @@ Concrete data flow for one preview run:
 | `packages/domain-rajal/src/` | Outpatient batch workflow + `legacyConfig.ts` (ported verdicts/config) |
 | `packages/audit-ledger/src/` | `ledger.ts` (`Ledger`, `FileLedger`, `MemoryLedger`), `redaction.ts` (isomorphic subpath export), `history.ts` (JSONL replay validation) |
 | `packages/test-fixtures/src/` | Synthetic EvoMedis fixtures (`ranap.ts`, `rajal.ts`) + `mockEvents.ts` (`mockEventStream`) |
+| `packages/domain-*/src/contract.ts` | Light subpath `@simrs-flow/domain-{ranap,rajal}/contract`: run-input builders (`input.ts`), node ids + next-action advice + evidence readers (`nodes.ts`), workflow, rule catalog. The UI and dashboard import domains only through it, never `executors.ts` |
+| `packages/api-contract/src/` | Type-only orchestrator ↔ UI wire contract (`RunSummary`, `RuleValues`/`RuleSet`, `CreateRunRequest`, `RanapDischargeRow`) |
 | `scripts/` | Dev/pilot/QA helpers, invoked directly (not npm scripts) — see below |
 | `docs/` | Architecture, API catalog, risk register, runbook, parity specs against legacy code |
 
@@ -159,7 +161,7 @@ node --import tsx scripts/pilot-live-write.ts                              # gua
 - **No Docker** (no Dockerfile/compose). **No bundler except Vite**, and Vite is used for the UI and dev server only; the orchestrator runs unbundled through `tsx` (`node --import tsx src/main.ts`).
 - **No codegen, no migrations, no seeding** — the only persistence is the append-only JSONL ledger. PostgreSQL is explicitly deferred.
 - TypeScript is strict: `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride`, `noFallthroughCasesInSwitch`, `verbatimModuleSyntax`, `isolatedModules`; `moduleResolution: Bundler`.
-- Build order follows tsconfig `references` (`tsc -b` per package): `workflow-core → audit-ledger → evomedis-client → {domain-ranap, domain-rajal, test-fixtures}`, then apps. Package output goes to `packages/*/dist`.
+- Build order follows tsconfig `references` (`tsc -b` per package): `workflow-core → audit-ledger → evomedis-client → {domain-ranap, domain-rajal} → {test-fixtures, api-contract}`, then apps. Package output goes to `packages/*/dist`.
 - Ports: orchestrator `4500` (bind `127.0.0.1`), UI dev `5173` (strictPort, proxies `/api`), livetest smoke `4711`, mock login server `4799`.
 - One Windows host may serve the built UI and the orchestrator on a single port via `UI_DIR` + `@fastify/static`.
 

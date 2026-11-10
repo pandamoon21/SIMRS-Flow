@@ -26,19 +26,21 @@
  */
 
 import type { BerkasReaderPort } from '@simrs-flow/domain-ranap';
+import type { RunSummary } from '@simrs-flow/api-contract';
 import {
   EventBus,
   WorkflowRunner,
   generateRunId,
   initialRunState,
   applyEvent,
+  isTerminalStatus,
   reduceEvents,
   type ExecutionMode,
   type RunState,
   type WorkflowEvent,
 } from '@simrs-flow/workflow-core';
 import { DEFAULT_CRITICAL_APPROVALS } from '@simrs-flow/evomedis-client';
-import type { HistoricalRunStatus, Ledger } from '@simrs-flow/audit-ledger';
+import type { Ledger } from '@simrs-flow/audit-ledger';
 import { getWorkflow, type ExecutorFactoryArgs, type WorkflowEntry } from './registry.js';
 import { deriveLockKeys, lockKeyLabel, TransactionLocks } from './locks.js';
 import { QaTransport, qaFixtures, qaFixtureTransport, type QaRunOptions } from './qaTransport.js';
@@ -110,22 +112,7 @@ export interface CreateRunInput {
   qa?: QaRunOptions;
 }
 
-export interface RunSummary {
-  runId: string;
-  workflowId: string;
-  workflowVersion: string;
-  mode: ExecutionMode;
-  status: RunState['status'] | HistoricalRunStatus;
-  startedAt: string;
-  finishedAt?: string;
-  operator?: string;
-  replayable: boolean;
-  source: 'memory' | 'ledger';
-  reason?: string;
-  truncatedTail?: boolean;
-  /** Set when an audit-ledger append failed; the trail for this run is incomplete. */
-  auditError?: string;
-}
+export type { RunSummary } from '@simrs-flow/api-contract';
 
 export interface RunSubscription {
   historical: boolean;
@@ -441,7 +428,7 @@ export class RunService {
   /** True while the run is still live in this process (not yet terminal). */
   isLive(runId: string): boolean {
     const status = this.runs.get(runId)?.state.status;
-    return status !== undefined && !['completed', 'failed', 'cancelled'].includes(status);
+    return status !== undefined && !isTerminalStatus(status);
   }
 
   /** Mode of a run (used by the server to decide whether auth is required). */

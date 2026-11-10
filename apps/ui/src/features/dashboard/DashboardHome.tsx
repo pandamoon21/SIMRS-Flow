@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, UnauthorizedError, type RunSummary } from '../../api/client.js';
-import { displayTime, needsAttention, openRunTitle, runProvenanceLabel, runStatusColor, runStatusLabel, splitRuns } from '../history/RunHistory.js';
+import { AuditErrorBadge, displayTime, needsAttention, openRunTitle, runProvenanceLabel, runStatusColor, runStatusLabel, splitRuns } from '../history/RunHistory.js';
 import type { DashboardPage } from '../../app/DashboardShell.js';
 import { Alert, Badge, Button, Card, CardBody, CardHeader, Col, RefreshButton, Row, Spinner } from '../../ui/primitives.js';
 import { SkylineStrip } from '../../ui/decor.js';
@@ -123,7 +123,7 @@ function RunRow({ run, onOpenRun }: { run: RunSummary; onOpenRun: (run: RunSumma
   const attention = needsAttention(run);
   return (
     <div className="run-list-row">
-      <div className="run-list-meta"><Badge color={runStatusColor(run)}>{runStatusLabel(run)}</Badge>{attention ? <Badge color="warning">Perlu perhatian</Badge> : null}<span>{run.mode}</span><span>{displayTime(run.startedAt)}</span></div>
+      <div className="run-list-meta"><Badge color={runStatusColor(run)}>{runStatusLabel(run)}</Badge>{attention ? <Badge color="warning">Perlu perhatian</Badge> : null}<AuditErrorBadge run={run} /><span>{run.mode}</span><span>{displayTime(run.startedAt)}</span></div>
       <div className="run-list-main"><strong>{run.workflowId}</strong><span>{run.runId} · {runProvenanceLabel(run)}</span></div>
       <Button color="info" variant="outline" size="sm" disabled={!run.replayable} title={openRunTitle(run.replayable)} onClick={() => onOpenRun(run)}>Open</Button>
     </div>

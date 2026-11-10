@@ -11,7 +11,11 @@
  * cannot attach an Authorization header.
  */
 
-import type { ExecutionMode, RunState, WorkflowDefinition, WorkflowEvent } from '@simrs-flow/workflow-core';
+import type { CreateRunRequest, RanapDischargeRow, RuleSet, RuleValues, RunSummary } from '@simrs-flow/api-contract';
+import type { RunState, WorkflowDefinition, WorkflowEvent } from '@simrs-flow/workflow-core';
+
+// Wire types live in the shared contract; re-exported so pages keep importing from the client.
+export type { CreateRunRequest, RanapDischargeRow, RuleSet, RuleValues, RunSummary };
 
 const BASE =
   (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_ORCHESTRATOR_URL ??
@@ -113,40 +117,12 @@ export interface SimrsReachability {
   error?: string;
 }
 
-export interface RunSummary {
-  runId: string;
-  workflowId: string;
-  workflowVersion: string;
-  mode: ExecutionMode;
-  status: RunState['status'] | 'interrupted' | 'unreplayable';
-  startedAt: string;
-  finishedAt?: string;
-  operator?: string;
-  replayable: boolean;
-  source: 'memory' | 'ledger';
-  reason?: string;
-  truncatedTail?: boolean;
-}
-
 /** `GET /api/rajal/unpaid` — the live unpaid-bill report as a run batch. */
 export interface RajalUnpaidResult {
   patientIds: string[];
   clinics: string[];
   clinicsByPatientId: Record<string, string[]>;
   total: number;
-}
-
-/** One row of `GET /api/ranap/discharged` (laporan pasien keluar rawat inap). */
-export interface RanapDischargeRow {
-  noRm: string;
-  nama: string;
-  ruang: string;
-  jaminan: string;
-  dpjp: string;
-  tglMasuk: string;
-  tglKeluar: string;
-  verifikasi: string;
-  bayar: string;
 }
 
 /** The orchestrator's `{ error | message }` body, when the failed response has one. */
@@ -193,17 +169,6 @@ async function delJson<T>(path: string): Promise<T> {
   if (!res.ok) throw new Error(`DELETE ${path} → ${res.status}`);
   return (await res.json()) as T;
 }
-
-/** Rules-page values; the orchestrator (apps/orchestrator/src/rules.ts) validates and owns them. */
-export interface RuleValues {
-  ranap: { bankDarahUnits: string[]; cathlabUnits: string[]; ibsManualReviewRooms: string[] };
-  rajal: {
-    treatmentGroups: Array<{ group: string; key: string; name: string }>;
-    skipTreatments: string[];
-    paymentConfig: { shift: string; type: string; payerCode: string };
-  };
-}
-export interface RuleSet { version: number; updatedAt?: string; updatedBy?: string; values: RuleValues }
 
 export interface PresenceOperator { name: string; online: boolean; lastSeenMs: number; self: boolean; }
 export interface PresenceResult { operators: PresenceOperator[]; onlineCount: number; }
@@ -276,14 +241,7 @@ export const api = {
   healthDetail: () => getJson<HealthSummary>('/api/health/details'),
   listWorkflows: () => getJson<{ workflows: WorkflowSummary[] }>('/api/workflows'),
   getWorkflow: (id: string) => getJson<WorkflowDefinition>(`/api/workflows/${id}`),
-  createRun: (body: {
-    workflowId: string;
-    mode?: ExecutionMode;
-    input?: unknown;
-    enabled?: Record<string, boolean>;
-    source?: 'fixture' | 'live';
-    autoApprove?: boolean;
-  }) => postJson<{ runId: string }>('/api/runs', body),
+  createRun: (body: CreateRunRequest) => postJson<{ runId: string }>('/api/runs', body),
   listRuns: () => getJson<{ runs: RunSummary[] }>('/api/runs'),
   rajalUnpaid: (query: { from: string; to: string; instalasi?: string; penjamin?: string; unit?: string }) =>
     getJson<RajalUnpaidResult>(`/api/rajal/unpaid?${new URLSearchParams(Object.entries(query).filter(([, v]) => v)).toString()}`),

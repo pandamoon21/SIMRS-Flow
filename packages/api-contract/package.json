@@ -1,0 +1,24 @@
+{
+  "name": "@simrs-flow/api-contract",
+  "version": "0.1.0",
+  "description": "Type-only wire contract between the orchestrator API and the UI (request and response shapes). No runtime code.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "src"],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@simrs-flow/audit-ledger": "0.1.0",
+    "@simrs-flow/domain-rajal": "0.1.0",
+    "@simrs-flow/domain-ranap": "0.1.0",
+    "@simrs-flow/workflow-core": "0.1.0"
+  }
+}

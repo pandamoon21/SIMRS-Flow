@@ -137,7 +137,7 @@ describe('UI api client — auth', () => {
         ? { status: 200, body: { token: 'T1', operator: 'a' } }
         : { status: 200, body: { runId: 'run_1' } };
     await api.login('a', 'b');
-    await api.createRun({ workflowId: 'wf', mode: 'preview', input: {}, source: 'live' });
+    await api.createRun({ workflowId: 'wf', mode: 'preview', input: { noRm: '0-12-34-56', tanggal: '2026-06-10' }, source: 'live' });
     const runCall = calls.find((c) => c.url.endsWith('/api/runs'))!;
     const sentBody = JSON.parse(runCall.init!.body as string);
     expect(sentBody.source).toBe('live');
@@ -152,7 +152,7 @@ describe('UI api client — auth', () => {
     await api.createRun({
       workflowId: 'wf',
       mode: 'preview',
-      input: {},
+      input: { noRm: '0-12-34-56', tanggal: '2026-06-10' },
       enabled: { validate_radiology: false },
       source: 'live',
     });
