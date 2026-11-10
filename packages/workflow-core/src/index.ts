@@ -49,3 +49,27 @@ export { REASONING_LABEL, reasoningEvidence, reasoningOf } from './reasoning.js'
 export { isIsoDate, optionalPositiveInteger, splitList } from './runInput.js';
 export type { RunInputResult } from './runInput.js';
 export type { Reasoning, ReasoningItem } from './reasoning.js';
+export {
+  ok,
+  fail,
+  blocked,
+  skipped,
+  review,
+  planResult,
+  warning,
+  errorMessage,
+  attempt,
+  softRead,
+  softJson,
+  softText,
+  recordReadFailure,
+  readFailureCount,
+  failedReads,
+  READ_FAILURES_KEY,
+  str,
+  upper,
+  flag,
+  rowsOf,
+  rowsField,
+} from './stepKit.js';
+export type { LegacyRow, ReadAttempt, StepReadClient, StepReadOptions } from './stepKit.js';

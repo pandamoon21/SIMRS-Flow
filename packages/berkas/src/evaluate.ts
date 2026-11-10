@@ -138,3 +138,18 @@ export function pageList(pages: readonly number[]): string {
   }
   return parts.length ? `hal. ${parts.join(', ')}` : '';
 }
+
+/**
+ * `getdatapiutang` filter as the upload-berkas page sends it — the e-klaim
+ * claim index both domains read before fetching a bundle. `kdInstalasi` is
+ * `'3'` for ranap and `'1'` for rajal; `from`/`to` are the `YYYY-MM-DD`
+ * period (ranap scans the stay plus tolerance, rajal the visit day).
+ */
+export function berkasIndexPayload(args: { noRm: string; from: string; to: string; kdInstalasi: '1' | '3' }): Record<string, string> {
+  return {
+    kd_instalasi: args.kdInstalasi, kd_kelasperawatan: '', kd_ruangperawatan: '', kd_poli: '', periode: '2',
+    txtperiode1_upld: args.from, txtperiode2_upld: args.to, txtnosep_upld: '', kd_penjamin: '',
+    no_sep_kosong_eklaim: 'false', no_sep_tdk_kosong_eklaim: 'false', posting_sudah_eklaim: 'false', posting_belum_eklaim: 'false',
+    no_medicalrecord: args.noRm, kd_jenis: '', reveral_bpjs: '0', page: '1', rows: '20',
+  };
+}

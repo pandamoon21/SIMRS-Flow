@@ -38,12 +38,26 @@ import type {
   VerificationRule,
   WorkflowIssue,
 } from '@simrs-flow/workflow-core';
-import { reasoningEvidence, type ReasoningItem } from '@simrs-flow/workflow-core';
+import {
+  blocked,
+  fail,
+  failedReads,
+  ok,
+  planResult,
+  readFailureCount,
+  reasoningEvidence,
+  review,
+  skipped,
+  softJson,
+  softText,
+  warning,
+  type ReasoningItem,
+} from '@simrs-flow/workflow-core';
 import type { EvoMedisClient } from '@simrs-flow/evomedis-client';
 import { noKkRejectionReason, normalizeCardNumber } from '@simrs-flow/evomedis-client';
 
 import { flag, type LegacyRow, rowsOf, str, upper } from './logic/types.js';
-import { berkasFactsOf, evaluateBerkas, pageList, type BerkasProgressPort, type BerkasReaderPort } from '@simrs-flow/berkas/evaluate';
+import { berkasFactsOf, berkasIndexPayload, evaluateBerkas, pageList, type BerkasProgressPort, type BerkasReaderPort } from '@simrs-flow/berkas/evaluate';
 import {
   buildUpdateDateTime,
   clampToleranceDays,
@@ -304,8 +318,7 @@ const K = {
   rmeSingleByReg: 'rmeSingleByReg',
   /** Non-gizi penunjang blocker label per registration, keyed by reg. */
   penunjangBlockerByReg: 'penunjangBlockerByReg',
-  /** Endpoint ids whose read came back as an error, with a count. */
-  readFailures: 'readFailures',
+  // Endpoint read failures live under workflow-core's READ_FAILURES_KEY (step toolkit).
   /** Registrations `execute_verifikasi` actually proposed a verification for. */
   plannedVerificationRegs: 'plannedVerificationRegs',
   /**
@@ -393,26 +406,13 @@ function alertsOf(ctx: ExecutorContext): RunAlerts {
   return alerts;
 }
 
-/**
- * Read failures, recorded so a step cannot report a clean verdict it never
- * earned.
- *
- * `softJson`/`softText` swallow the error the way the legacy `try/except` does,
- * but the legacy script prints the exception and its caller registers a sync
- * issue; a silently-empty read here used to be indistinguishable from a genuinely
- * empty answer. `validate_penunjang` in particular reported
- * "Hasil penunjang lengkap (0 pemeriksaan diperiksa)" when all four history
- * reads had failed.
- */
-function recordReadFailure(ctx: ExecutorContext, endpointId: string): void {
-  const failures = scratchRecord<number>(ctx, K.readFailures);
-  failures[endpointId] = (failures[endpointId] ?? 0) + 1;
-}
-
-/** How often `endpointId` failed so far this run (compare before/after a node's own reads). */
-function readFailureCount(ctx: ExecutorContext, endpointId: string): number {
-  return scratchRecord<number>(ctx, K.readFailures)[endpointId] ?? 0;
-}
+// Read failures (`softJson`/`softText`, `failedReads`, `readFailureCount`) are
+// tracked by the workflow-core step toolkit under `READ_FAILURES_KEY`. The
+// legacy script prints the exception and its caller registers a sync issue; a
+// silently-empty read here used to be indistinguishable from a genuinely empty
+// answer. `validate_penunjang` in particular reported
+// "Hasil penunjang lengkap (0 pemeriksaan diperiksa)" when all four history
+// reads had failed.
 
 /**
  * An unreadable comparison leaves nothing proven, so every group is held back
@@ -421,12 +421,6 @@ function readFailureCount(ctx: ExecutorContext, endpointId: string): number {
 function blockUnreadable(ctx: ExecutorContext, regs: readonly (readonly [string, unknown])[], reason: string): void {
   const alerts = alertsOf(ctx);
   for (const [reg] of regs) alerts.registerVerificationBlocker(reg, reason);
-}
-
-/** Which of `endpointIds` failed at least once during this run. */
-function failedReads(ctx: ExecutorContext, ...endpointIds: readonly string[]): string[] {
-  const failures = scratchRecord<number>(ctx, K.readFailures);
-  return endpointIds.filter((id) => (failures[id] ?? 0) > 0);
 }
 
 /**
@@ -482,18 +476,6 @@ function normalizedMedrec(patientId: string): string {
 
 // ── step results ─────────────────────────────────────────────────
 
-function ok(summary: string, extra?: Partial<StepResult>): StepResult {
-  return { status: 'success', summary, ...extra };
-}
-function fail(summary: string): StepResult {
-  return { status: 'failed', summary };
-}
-function blocked(summary: string, extra?: Partial<StepResult>): StepResult {
-  return { status: 'blocked', summary, ...extra };
-}
-function skipped(summary: string): StepResult {
-  return { status: 'skipped', summary };
-}
 /** Why the stay counts as entered via IGD / POLI: the entry visit and what matched it. */
 function originBasis(origin: { unit?: string; trx?: string; sepMatch?: boolean; doctorMatch?: boolean } | undefined): string | undefined {
   if (!origin?.unit && !origin?.trx) return undefined;
@@ -514,18 +496,6 @@ function reasoned(result: StepResult, title: string, items: ReasoningItem[]): St
 
 const visitLabel = (row: LegacyRow): string =>
   `${str(row, 'nama_unit') || 'Kunjungan'} · masuk ${str(row, 'tgl_masuk') || '-'}`;
-
-function review(summary: string, extra?: Partial<StepResult>): StepResult {
-  return { status: 'needs_review', summary, ...extra };
-}
-function planResult(summary: string, plans: MutationPlan[]): StepResult {
-  if (plans.length === 0) return skipped(summary);
-  return { status: 'needs_review', summary, proposedMutations: plans };
-}
-
-function warning(code: string, message: string, severity: IssueSeverity = 'warn'): WorkflowIssue {
-  return { code, message, severity };
-}
 
 /** The argument triple of every per-line-item tindakan check. */
 interface TindakanLineKey {
@@ -1075,44 +1045,6 @@ function transferLabPkPayload(op: LabPkTransferKey & {
 // ── fetch helpers ────────────────────────────────────────────────
 
 /**
- * A read that is allowed to come back empty. The legacy script wraps almost
- * every read in a bare `try/except` and carries on with `{}`; a missing
- * optional read must not fail the step, but it must still be visible, so the
- * reason lands in the debug log.
- */
-async function softJson<T>(
-  ctx: ExecutorContext,
-  client: EvoMedisClient,
-  endpointId: string,
-  data: Record<string, string>,
-  options?: { query?: Record<string, string> },
-): Promise<T | undefined> {
-  try {
-    return await client.postJson<T>(endpointId, data, { signal: ctx.signal, ...(options ?? {}) });
-  } catch (err) {
-    recordReadFailure(ctx, endpointId);
-    ctx.log(`Read ${endpointId} gagal: ${err instanceof Error ? err.message : String(err)}`, 'debug');
-    return undefined;
-  }
-}
-
-async function softText(
-  ctx: ExecutorContext,
-  client: EvoMedisClient,
-  endpointId: string,
-  data: Record<string, string>,
-  options?: { query?: Record<string, string> },
-): Promise<string> {
-  try {
-    return await client.postText(endpointId, data, { signal: ctx.signal, ...(options ?? {}) });
-  } catch (err) {
-    recordReadFailure(ctx, endpointId);
-    ctx.log(`Read ${endpointId} gagal: ${err instanceof Error ? err.message : String(err)}`, 'debug');
-    return '';
-  }
-}
-
-/**
  * `ambil_historykunjungan_inap` (ranap_v3.py:3330) — the inpatient visit tab.
  *
  * The three empty filter fields and the `page`/`rows` pair are not optional: the
@@ -1131,16 +1063,6 @@ function historyKunjunganInapPayload(noRm: string): Record<string, string> {
 }
 
 /** `gethistoryilab` / `gethistory_orderpa` / `gethistoryirad` / `gethistoryiok` — one page of 50. */
-/** `getdatapiutang` filter as the upload-berkas page sends it (kd_instalasi 3 ranap, 1 rajal). */
-function berkasIndexPayload(noRm: string, from: string, to: string, kdInstalasi: '1' | '3'): Record<string, string> {
-  return {
-    kd_instalasi: kdInstalasi, kd_kelasperawatan: '', kd_ruangperawatan: '', kd_poli: '', periode: '2',
-    txtperiode1_upld: from, txtperiode2_upld: to, txtnosep_upld: '', kd_penjamin: '',
-    no_sep_kosong_eklaim: 'false', no_sep_tdk_kosong_eklaim: 'false', posting_sudah_eklaim: 'false', posting_belum_eklaim: 'false',
-    no_medicalrecord: noRm, kd_jenis: '', reveral_bpjs: '0', page: '1', rows: '20',
-  };
-}
-
 /** `YYYY-MM-DD` of a date (UTC calendar day — the run clock is UTC-stamped). */
 function isoDay(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -4601,7 +4523,7 @@ export function createRanapExecutors(deps: RanapDeps): ExecutorRegistry {
 
       // The claim index: one row per visit with SEP and register numbers.
       const tolerance = clampToleranceDays(input.toleranceDays ?? 3);
-      const piutang = rowsOf(await softJson<unknown>(ctx, client, 'uploadBerkas.getDataPiutang', berkasIndexPayload(input.noRm, isoDayOffset(input.tanggal, -(tolerance + 3)), isoDay(ctx.clock.now()), '3')));
+      const piutang = rowsOf(await softJson<unknown>(ctx, client, 'uploadBerkas.getDataPiutang', berkasIndexPayload({ noRm: input.noRm, from: isoDayOffset(input.tanggal, -(tolerance + 3)), to: isoDay(ctx.clock.now()), kdInstalasi: '3' })));
       const rows = piutang.filter((row) => regs.includes(str(row, 'no_registrasikunjungan')));
       if (rows.length === 0) {
         return reasoned(review('Berkas e-klaim belum ditemukan untuk registrasi ini — periksa manual', {
