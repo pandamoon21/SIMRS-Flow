@@ -11,6 +11,8 @@ import { durationLabel, nextActionOf, outcomeDetail, patientOutcomesOf, PREVIEW_
 export interface RunSummaryProps {
   state: RunState;
   runId: string;
+  /** A client-side fixture replay: never reached the orchestrator, so there is no ledger to list or export. */
+  fixture?: boolean;
   labelOf: (nodeId: string) => string;
   onFocusNode: (nodeId: string) => void;
   onOpenHistory: () => void;
@@ -23,14 +25,12 @@ export interface RunSummaryProps {
   sectionRef?: Ref<HTMLElement>;
 }
 
-export function RunSummary({ state, runId, labelOf, onFocusNode, onOpenHistory, onNewRun, style, grips, sectionRef }: RunSummaryProps) {
+export function RunSummary({ state, runId, fixture = false, labelOf, onFocusNode, onOpenHistory, onNewRun, style, grips, sectionRef }: RunSummaryProps) {
   // Closable so the finished graph underneath can be read; it returns for the next run.
   const [closedFor, setClosedFor] = useState<string>();
   const outcome = runOutcomeOf(state);
   if (closedFor === runId) return null;
   const { verified, failed, open } = outcome.mutations;
-  // Fixture replays never reach the orchestrator, so there is no ledger to list or export.
-  const fixture = runId.startsWith('offline-');
   const held = previewGateStopOf(state);
   const patients = patientOutcomesOf(state);
   const skipped = patients.filter((row) => row.status === 'dilewati');

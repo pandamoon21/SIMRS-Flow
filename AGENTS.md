@@ -48,7 +48,7 @@ Concrete data flow for one preview run:
 
 | Path | Purpose |
 | --- | --- |
-| `apps/ui/src/` | React app: `app/App.tsx` shell (no router, local page state), `store/runStore.ts` (Zustand projection), `api/client.ts` (REST + SSE), `features/{canvas,panels,run,history,review,dashboard,settings}/` (presentational), `ui/primitives.tsx` |
+| `apps/ui/src/` | React app: `app/App.tsx` shell (no router, local page state), `session/runSession.ts` (pure-TS run session: start/stream/replay/commands via a live or fixture-replay adapter; fixtures load by dynamic `import()` only), `store/runStore.ts` (Zustand projection), `api/client.ts` (REST + SSE), `features/{canvas,panels,run,history,review,dashboard,settings}/` (presentational), `ui/primitives.tsx` |
 | `apps/orchestrator/src/` | Fastify API: `main.ts` (wiring), `server.ts` (routes), `RunService.ts` (orchestration core, composes `runApprovals.ts` gate/plan approvals + auto-approve queue, `replanBarrier.ts`, `simrsAccess.ts` session→transport, `runHistory.ts` ledger summaries + cache rule), `registry.ts` (`WORKFLOWS`), `mutationGate.ts`, `locks.ts`, `sessions.ts`, `auth.ts`, `reloginTransport.ts`, `config.ts`, `rules.ts` (rule catalog serving), `naikKelas.ts` (IUR naik kelas logic) |
 | `packages/workflow-core/src/` | Framework-agnostic engine: `types.ts` (single source of truth for all contracts), `runner.ts`, `reducer.ts`, `eventBus.ts`, `definition.ts`, `expectations.ts`, `jsonl.ts`, `ids.ts`, `reasoning.ts` |
 | `packages/domain-*/src/ruleCatalog.generated.ts` | **Generated — do not hand-edit.** Rebuilt by `scripts/gen-rule-catalog.ts`; `ruleCatalog.test.ts` fails when the committed file is stale |
