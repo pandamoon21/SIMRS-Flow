@@ -36,6 +36,7 @@ export default defineConfig({
       // Node-only (OCR); aliased for parity, never imported by the UI bundle.
       '@simrs-flow/berkas': pkg('berkas'),
       '@simrs-flow/test-fixtures': pkg('test-fixtures'),
+      '@simrs-flow/evomedis-client/endpoints': file('evomedis-client/src/endpoints.ts'),
       '@simrs-flow/evomedis-client': pkg('evomedis-client'),
       // The UI imports domains only through these light subpaths (no executors).
       // Subpaths before their package: an alias also matches `<key>/...`.

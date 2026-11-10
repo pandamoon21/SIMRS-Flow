@@ -14,6 +14,7 @@ export default defineConfig({
       '@simrs-flow/audit-ledger': pkg('audit-ledger'),
       '@simrs-flow/berkas/evaluate': file('berkas/src/evaluate.ts'),
       '@simrs-flow/berkas': pkg('berkas'),
+      '@simrs-flow/evomedis-client/endpoints': file('evomedis-client/src/endpoints.ts'),
       '@simrs-flow/evomedis-client': pkg('evomedis-client'),
       // Subpaths before their package: an alias also matches `<key>/...`.
       '@simrs-flow/domain-ranap/contract': file('domain-ranap/src/contract.ts'),

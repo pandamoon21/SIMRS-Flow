@@ -73,3 +73,11 @@ export {
   rowsField,
 } from './stepKit.js';
 export type { LegacyRow, ReadAttempt, StepReadClient, StepReadOptions } from './stepKit.js';
+export { buildRuleCatalog, matchesTemplate, recordStepResults, undeclaredOutcomes } from './outcomes.js';
+export type {
+  DeclaredOutcomes,
+  EndpointLookup,
+  OutcomeDeclarations,
+  RecordedStepResult,
+  UndeclaredOutcome,
+} from './outcomes.js';
