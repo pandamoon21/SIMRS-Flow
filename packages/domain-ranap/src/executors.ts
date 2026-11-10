@@ -57,7 +57,8 @@ import type { EvoMedisClient } from '@simrs-flow/evomedis-client';
 import { noKkRejectionReason, normalizeCardNumber } from '@simrs-flow/evomedis-client';
 
 import { flag, type LegacyRow, rowsOf, str, upper } from './logic/types.js';
-import { berkasFactsOf, berkasIndexPayload, evaluateBerkas, pageList, type BerkasProgressPort, type BerkasReaderPort } from '@simrs-flow/berkas/evaluate';
+import { RANAP_TITIPAN_EVIDENCE, RANAP_VALID_RM_REASON } from './nodes.js';
+import { BERKAS_PROGRESS_KEY, berkasFactsOf, berkasIndexPayload, evaluateBerkas, pageList, type BerkasProgressPort, type BerkasReaderPort } from '@simrs-flow/berkas/evaluate';
 import {
   buildUpdateDateTime,
   clampToleranceDays,
@@ -1106,7 +1107,7 @@ export function createRanapExecutors(deps: RanapDeps): ExecutorRegistry {
         noRm = normalizeNoRmInput(firstPatientId);
       } catch (err) {
         return reasoned(fail(`Input No RM tidak valid | input=${firstPatientId} | alasan=${asMessage(err)}`), inputTitle,
-          [{ label: 'Format No RM valid', ok: false, detail: `${firstPatientId}: ${asMessage(err)}` }]);
+          [{ label: RANAP_VALID_RM_REASON, ok: false, detail: `${firstPatientId}: ${asMessage(err)}` }]);
       }
 
       let tanggal: string;
@@ -1114,7 +1115,7 @@ export function createRanapExecutors(deps: RanapDeps): ExecutorRegistry {
         tanggal = normalizeTanggalInput(raw.tanggal);
       } catch (err) {
         return reasoned(fail(`Input tanggal tidak valid | input=${raw.tanggal ?? '-'} | alasan=${asMessage(err)}`), inputTitle, [
-          { label: 'Format No RM valid', ok: true, detail: noRm },
+          { label: RANAP_VALID_RM_REASON, ok: true, detail: noRm },
           { label: 'Format tanggal valid', ok: false, detail: `${raw.tanggal ?? '-'}: ${asMessage(err)}` },
         ]);
       }
@@ -1147,7 +1148,7 @@ export function createRanapExecutors(deps: RanapDeps): ExecutorRegistry {
       }
 
       return reasoned(ok(`${patientIds.length} medrec, ${tanggal}, toleransi ±${toleranceDays} hari`), inputTitle, [
-        { label: 'Format No RM valid', ok: true, detail: noRm },
+        { label: RANAP_VALID_RM_REASON, ok: true, detail: noRm },
         { label: 'Format tanggal valid', ok: true, detail: tanggal },
         { label: `Toleransi tanggal ±${toleranceDays} hari`, ok: null, detail: `kunjungan dicari ${toleranceDays} hari sebelum s/d sesudah ${tanggal}` },
         { label: 'Penjamin diterima', ok: null, detail: accepted.length > 0 ? accepted.join(', ') : 'semua' },
@@ -2236,7 +2237,7 @@ export function createRanapExecutors(deps: RanapDeps): ExecutorRegistry {
           ? `TITIPAN — ruang ${item.roomClass || '-'} di atas hak ${item.sepClass || '-'}`
           : item.result === 'NORMAL' ? `ruang ${item.roomClass || '-'} · hak ${item.sepClass || '-'}` : `belum dapat dievaluasi: ${item.reason}`,
       }));
-      const evidence = [{ label: 'titipan', data: evaluations }, reasoningEvidence({ title: titipanTitle, items: titipanChecks })];
+      const evidence = [{ label: RANAP_TITIPAN_EVIDENCE, data: evaluations }, reasoningEvidence({ title: titipanTitle, items: titipanChecks })];
       if (titipanRooms.length > 0) {
         return review(`${titipanRooms.length} ruang terdeteksi TITIPAN: ${titipanRooms.join(', ')}`, {
           warnings: [warning('titipan', `Kelas ruang di atas hak SEP: ${titipanRooms.join(', ')}`)],
@@ -4519,7 +4520,7 @@ export function createRanapExecutors(deps: RanapDeps): ExecutorRegistry {
       if (regs.length === 0) return skipped('Belum ada grup rawat inap');
       const berkasTitle = 'Dokumen wajib klaim dicari di berkas e-klaim (judul halaman, OCR untuk foto)';
       const progress = (reg: string) => (p: BerkasProgressPort) =>
-        ctx.log(`Berkas ${reg}: ${p.label}`, 'debug', { berkasProgress: { phase: p.phase, done: p.done, total: p.total, label: p.label } });
+        ctx.log(`Berkas ${reg}: ${p.label}`, 'debug', { [BERKAS_PROGRESS_KEY]: { phase: p.phase, done: p.done, total: p.total, label: p.label } });
 
       // The claim index: one row per visit with SEP and register numbers.
       const tolerance = clampToleranceDays(input.toleranceDays ?? 3);
