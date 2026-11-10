@@ -515,6 +515,7 @@ describe('RunService mutation gate — outcome and existing controls', () => {
     const { service, transport, definition } = harness({
       plans: [critical],
       fixtures: { ...HAPPY_FIXTURES, 'kasir.tampungBayar': { text: '1' } },
+      criticalApprovals: 2,
     });
     const runId = await startAtGate(service, definition.id);
 
@@ -530,6 +531,34 @@ describe('RunService mutation gate — outcome and existing controls', () => {
     expect(endpointsCalled(transport)).toContain('kasir.tampungBayar');
     const state = await service.getState(runId);
     expect(state?.mutations['plan-bayar']?.approvedBy).toEqual(['alice', 'bob']);
+    await finish(service, runId);
+  });
+
+  it('holds a plan to the registry risk when it declares less (high plan on kasir.tampungBayar)', async () => {
+    const underDeclared = tglPlan({
+      id: 'plan-bayar', endpointId: 'kasir.tampungBayar', riskLevel: 'high',
+      idempotencyKey: 'plan-bayar', payload: { no_transaksi: 'T-1', grand_total: '90000' }, readAfterWriteCheck: undefined,
+    });
+    const { service, transport, definition } = harness({
+      plans: [underDeclared], fixtures: { ...HAPPY_FIXTURES, 'kasir.tampungBayar': { text: '1' } }, criticalApprovals: 2,
+    });
+    const runId = await startAtGate(service, definition.id);
+    const first = await service.approveMutation(runId, 'plan-bayar', 'alice');
+    expect(first).toMatchObject({ ok: true, resolved: false, required: 2, remaining: 1 });
+    expect(endpointsCalled(transport)).not.toContain('kasir.tampungBayar');
+    const second = await service.approveMutation(runId, 'plan-bayar', 'bob');
+    expect(second).toMatchObject({ ok: true, resolved: true, required: 2 });
+    expect(endpointsCalled(transport)).toContain('kasir.tampungBayar');
+    await finish(service, runId);
+  });
+
+  it('fails closed on a plan for an unknown endpoint: it needs the critical approval count', async () => {
+    const unknown = tglPlan({ id: 'plan-x', endpointId: 'kasir.noSuchWrite', riskLevel: 'low', idempotencyKey: 'plan-x' });
+    const { service, transport, definition } = harness({ plans: [unknown], fixtures: HAPPY_FIXTURES, criticalApprovals: 2 });
+    const runId = await startAtGate(service, definition.id);
+    const first = await service.approveMutation(runId, 'plan-x', 'alice');
+    expect(first).toMatchObject({ ok: true, resolved: false, required: 2, remaining: 1 });
+    expect(endpointsCalled(transport)).not.toContain('kasir.noSuchWrite');
     await finish(service, runId);
   });
 
@@ -602,8 +631,9 @@ describe('RunService auto-approve write runs', () => {
   async function runAutoApproved(
     fixtures: Record<string, FixtureEntry> = HAPPY_FIXTURES,
     plans: MutationPlan[] = [tglPlan()],
+    criticalApprovals?: 1 | 2,
   ) {
-    const { service, transport } = harness({ plans, fixtures });
+    const { service, transport } = harness({ plans, fixtures, ...(criticalApprovals ? { criticalApprovals } : {}) });
     const { runId } = await service.createRun({
       workflowId: 'test-mutation-flow',
       mode: 'write',
@@ -724,7 +754,7 @@ describe('RunService auto-approve write runs', () => {
     // real operator — never a bare two-human sign-off.
     const { service, state } = await runAutoApproved(HAPPY_FIXTURES, [
       tglPlan({ riskLevel: 'critical' }),
-    ]);
+    ], 2);
 
     const outcome = state?.mutations['plan-tgl'];
     expect(outcome?.status).toBe('verified');

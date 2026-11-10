@@ -199,13 +199,13 @@ describe('orchestrator API — write-mode security', () => {
     });
   }
 
-  function writeApp() {
+  function writeApp(criticalApprovals?: 1 | 2) {
     const ledger = new MemoryLedger();
     const sessions = new UserSessionStore({
       baseUrlV1: 'https://simrs.example.local/x',
       transport: loginTransport(),
     });
-    return buildServer({ ledger, sessions });
+    return buildServer({ ledger, sessions, ...(criticalApprovals ? { criticalApprovals } : {}) });
   }
 
   async function inject(
@@ -387,7 +387,7 @@ describe('orchestrator API — write-mode security', () => {
   });
 
   it('requires two distinct operators to approve a critical gate', async () => {
-    const a = writeApp();
+    const a = writeApp(2);
     const AUTH = await authFor(a, 'alice');
     const AUTH2 = await authFor(a, 'bob');
     const created = await inject(

@@ -10,6 +10,10 @@ export {
   endpointLabel,
   mutatingEndpointIds,
   isMutating,
+  DEFAULT_CRITICAL_APPROVALS,
+  approvalsForRisk,
+  effectivePlanRisk,
+  planApprovalsRequired,
 } from './endpoints.js';
 export type {
   EndpointDef,

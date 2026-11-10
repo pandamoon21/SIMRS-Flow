@@ -45,7 +45,7 @@ import { hostname, networkInterfaces } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { accessUrls, dirStats, fileStats, safeUrl } from './config.js';
 import { FileLedger, type Ledger } from '@simrs-flow/audit-ledger';
-import { EvoMedisClient, FetchTransport, LoginFailedError } from '@simrs-flow/evomedis-client';
+import { DEFAULT_CRITICAL_APPROVALS, EvoMedisClient, FetchTransport, LoginFailedError } from '@simrs-flow/evomedis-client';
 import { fetchRajalUnpaidBatch } from '@simrs-flow/domain-rajal';
 import { buildRanapDischargeQuery, parseRanapDischargeReport, type RanapReportFlag } from '@simrs-flow/domain-ranap';
 import { ReloginTransport } from './reloginTransport.js';
@@ -755,7 +755,8 @@ function hostDetails(options: ServerOptions) {
       notes: options.notesFile ? fileStats(resolve(options.notesFile)) : undefined,
     },
     policy: {
-      criticalApprovals: options.criticalApprovals ?? 2,
+      // Same resolution as RunService, so the health page shows what is enforced.
+      criticalApprovals: options.criticalApprovals ?? DEFAULT_CRITICAL_APPROVALS,
       autoApproveWrites: options.autoApproveWrites ?? false,
       qaLogin: Boolean(options.qaAuth),
     },

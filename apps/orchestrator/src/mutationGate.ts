@@ -240,10 +240,10 @@ export function writeAcknowledged(response: unknown, endpointId = ''): { ok: boo
     }
     // ranap_v3.py:6403 — transfer endpoints succeed when the notice contains it.
     if (/transfer sukses/i.test(cleaned)) return { ok: true, reason: `acknowledged "${cleaned}"` };
-    // tambah_tindakan_polis answers the new urut_tindakan (live 2026-10-15: "43").
-    if (endpointId === 'penatajasaInap.tambahTindakanPolis' && /^\d+$/.test(cleaned)) {
-      return { ok: true, reason: `added as urut_tindakan ${cleaned}` };
-    }
+    // Endpoint-specific answers live on the registry entry (e.g.
+    // tambah_tindakan_polis answers the new urut_tindakan); unknown ids have none.
+    const endpointReason = getEndpoint(endpointId)?.acknowledges?.(cleaned);
+    if (endpointReason !== undefined) return { ok: true, reason: endpointReason };
     return { ok: false, reason: `write answered "${cleaned.slice(0, 200)}"` };
   }
   if (response && typeof response === 'object' && !Array.isArray(response)) {

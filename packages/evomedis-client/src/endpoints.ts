@@ -33,6 +33,14 @@ export interface EndpointDef {
   description: string;
   /** Operator-facing name of a write (Indonesian), used in run messages. */
   label?: string;
+  /**
+   * Endpoint-specific acknowledgement of a write's text answer, consulted by
+   * the mutation gate only after the generic rules (empty body, `1`/`OK`/…,
+   * "transfer sukses") did not accept it and before it is called a failure.
+   * Receives the trimmed, unquoted body; returns the acknowledgement reason,
+   * or undefined when this endpoint does not recognise it either.
+   */
+  acknowledges?: (text: string) => string | undefined;
 }
 
 /**
@@ -914,6 +922,8 @@ export const ENDPOINTS = {
     riskLevel: 'high',
     requiresApproval: true,
     response: 'text',
+    // Answers the new urut_tindakan (live 2026-10-15: "43").
+    acknowledges: (text: string) => (/^\d+$/.test(text) ? `added as urut_tindakan ${text}` : undefined),
     description:
       'Add an inpatient tindakan line ({No_Transaksi_Poli, Kd_Tindakan_Poli, Kd_Unit_Poli, Kd_ParaMedis_Poli, Kd_DetKelPenjamin_Poli, Harga_Poli, Jumlah_Poli, Qty_Poli, kd_kamar, durasi, tgl_mulai, tgl_selesai, pisah_klaim}).',
   },
@@ -1661,4 +1671,35 @@ export function endpointLabel(id: string): string {
 /** Is this id a known mutating endpoint? */
 export function isMutating(id: string): boolean {
   return getEndpoint(id)?.kind === 'mutate';
+}
+
+/**
+ * Default `CRITICAL_APPROVALS`: one operator works the whole patient set. A
+ * two-person site sets 2. The one value every default in the app reads.
+ */
+export const DEFAULT_CRITICAL_APPROVALS = 1;
+
+const RISK_ORDER: readonly EndpointRisk[] = ['low', 'medium', 'high', 'critical'];
+
+/** Approvals a write at this risk needs: `critical` takes the configured count, anything else one. */
+export function approvalsForRisk(risk: EndpointRisk | undefined, criticalApprovals: number): number {
+  return risk === 'critical' ? criticalApprovals : 1;
+}
+
+/**
+ * Risk a mutation plan is held to: the higher of what the registry says about
+ * its endpoint and what the plan declares. A plan cannot talk its way below
+ * the registry (a `high` plan on `kasir.tampungBayar` is still critical). An
+ * unknown endpoint fails closed as `critical`.
+ */
+export function effectivePlanRisk(endpointId: string, planRisk: EndpointRisk | undefined): EndpointRisk {
+  const registry = getEndpoint(endpointId)?.riskLevel;
+  if (!registry) return 'critical';
+  const declared = planRisk ?? 'low';
+  return RISK_ORDER.indexOf(declared) > RISK_ORDER.indexOf(registry) ? declared : registry;
+}
+
+/** Approvals a mutation plan needs before it may fire (two-person rule, control #22). */
+export function planApprovalsRequired(endpointId: string, planRisk: EndpointRisk | undefined, criticalApprovals: number): number {
+  return approvalsForRisk(effectivePlanRisk(endpointId, planRisk), criticalApprovals);
 }

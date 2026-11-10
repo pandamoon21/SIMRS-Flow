@@ -15,6 +15,10 @@ import {
   noKkRejectionReason,
   normalizeCardNumber,
   normalizeDate,
+  DEFAULT_CRITICAL_APPROVALS,
+  approvalsForRisk,
+  effectivePlanRisk,
+  planApprovalsRequired,
 } from '../src/index.js';
 import type { EndpointDef, SessionConfig } from '../src/index.js';
 import { isLoginRedirect } from './client.js';
@@ -527,5 +531,36 @@ describe('EvoMedisClient — login', () => {
     await c.postText('kasir.cekStatusVerifikasi', { no_transaksi: '03-1' });
     const readCall = transport.calls[1]!;
     expect(readCall.headers['Cookie']).toBe('ci_session=live1');
+  });
+});
+
+describe('approval thresholds (registry-owned)', () => {
+  it('defaults to one critical approval', () => {
+    expect(DEFAULT_CRITICAL_APPROVALS).toBe(1);
+  });
+  it('takes the higher of registry and declared risk', () => {
+    expect(effectivePlanRisk('kasir.tampungBayar', 'high')).toBe('critical');
+    expect(effectivePlanRisk('kasir.tampungBayar', undefined)).toBe('critical');
+    expect(effectivePlanRisk('kasir.updateTglMasuk', 'critical')).toBe('critical');
+    expect(effectivePlanRisk('kasir.updateTglMasuk', 'low')).toBe(ENDPOINTS['kasir.updateTglMasuk'].riskLevel);
+  });
+  it('fails closed on an unknown endpoint', () => {
+    expect(effectivePlanRisk('no.suchEndpoint', 'low')).toBe('critical');
+    expect(planApprovalsRequired('no.suchEndpoint', 'low', 2)).toBe(2);
+  });
+  it('a high plan on kasir.tampungBayar needs the critical count', () => {
+    expect(planApprovalsRequired('kasir.tampungBayar', 'high', 2)).toBe(2);
+    expect(planApprovalsRequired('kasir.tampungBayar', 'high', 1)).toBe(1);
+    expect(planApprovalsRequired('kasir.updateTglMasuk', 'high', 2)).toBe(1);
+  });
+  it('every critical registry endpoint needs the critical count whatever the plan declares', () => {
+    const critical = Object.values(ENDPOINTS as Record<string, EndpointDef>).filter((e) => e.riskLevel === 'critical');
+    expect(critical.map((e) => e.id).sort()).toEqual(['kasir.tampungBayar', 'verifikator.batalVerifikasi', 'verifikator.simpanVerifikasi']);
+    for (const e of critical) expect(planApprovalsRequired(e.id, 'low', 2)).toBe(2);
+  });
+  it('maps risk to approvals', () => {
+    expect(approvalsForRisk('critical', 2)).toBe(2);
+    expect(approvalsForRisk('high', 2)).toBe(1);
+    expect(approvalsForRisk(undefined, 2)).toBe(1);
   });
 });

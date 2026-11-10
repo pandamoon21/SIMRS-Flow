@@ -42,7 +42,14 @@ import {
   type WorkflowEvent,
   type WorkflowNodeDefinition,
 } from '@simrs-flow/workflow-core';
-import { endpointLabel, FetchTransport, type EvoMedisClient } from '@simrs-flow/evomedis-client';
+import {
+  approvalsForRisk,
+  DEFAULT_CRITICAL_APPROVALS,
+  endpointLabel,
+  FetchTransport,
+  planApprovalsRequired,
+  type EvoMedisClient,
+} from '@simrs-flow/evomedis-client';
 import type {
   HistoricalRunStatus,
   Ledger,
@@ -261,8 +268,8 @@ export interface RunServiceOptions {
    */
   autoApproveWrites?: boolean;
   /**
-   * Approvals a `critical` gate/plan needs (two-person rule). Default 2; a
-   * single-operator site sets 1 so verifikasi/tampung bayar stay reachable.
+   * Approvals a `critical` gate/plan needs (two-person rule). Default
+   * `DEFAULT_CRITICAL_APPROVALS` (1, one operator); a two-person site sets 2.
    */
   criticalApprovals?: 1 | 2;
   /** Rules-page values merged into every run's input as defaults. */
@@ -293,18 +300,14 @@ function httpError(statusCode: number, message: string): Error {
   return Object.assign(new Error(message), { statusCode });
 }
 
-/** Risk level that demands two-person approval at the gate. */
-function gateApprovalsRequired(node: WorkflowNodeDefinition, critical: number): number {
-  return node.riskLevel === 'critical' ? critical : 1;
-}
-
 /**
- * Approvals a mutation plan needs before it may fire. Mirrors the gate rule
- * (control #22) so applying a `critical` plan cannot be a cheaper path than
- * approving a `critical` gate.
+ * Approvals a gate needs: the node's declared risk. Nodes do not name their
+ * endpoints statically, so the registry cannot be consulted here; the plans a
+ * gate guards are each held to the registry by `planApprovalsRequired`
+ * (control #22), so the gate is never the only line.
  */
-function planApprovalsRequired(plan: MutationPlan, critical: number): number {
-  return plan.riskLevel === 'critical' ? critical : 1;
+function gateApprovalsRequired(node: WorkflowNodeDefinition, critical: number): number {
+  return approvalsForRisk(node.riskLevel, critical);
 }
 
 /**
@@ -356,7 +359,7 @@ export class RunService {
     this.retainFinished = options.retainFinishedRuns ?? RETAINED_FINISHED_RUNS;
     this.workflows = options.workflows ?? getWorkflow;
     this.autoApproveWrites = options.autoApproveWrites ?? false;
-    this.criticalApprovals = options.criticalApprovals ?? 2;
+    this.criticalApprovals = options.criticalApprovals ?? DEFAULT_CRITICAL_APPROVALS;
     this.rules = options.rules;
     this.berkas = options.berkas;
   }
@@ -931,7 +934,9 @@ export class RunService {
     const approvals = handle.mutationApprovals.get(planId) ?? new Set<string>();
     approvals.add(operator);
     handle.mutationApprovals.set(planId, approvals);
-    const required = planApprovalsRequired(found.plan, this.criticalApprovals);
+    // The registry owns the threshold: the higher of its risk and the plan's
+    // (an unknown endpoint fails closed as critical).
+    const required = planApprovalsRequired(found.plan.endpointId, found.plan.riskLevel, this.criticalApprovals);
     if (approvals.size < required) {
       // Surface the partial approval in the audit/event stream.
       handle.bus.emit({
