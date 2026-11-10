@@ -14,9 +14,9 @@ describe('rajal node facts', () => {
   });
 
   it('matches the evidence label emit_batch_summary emits', () => {
-    // The executor still spells the label inline; this pins the reader to it until it adopts the constant.
+    // emit_batch_summary labels its evidence with the constant the reader uses.
     const source = readFileSync(new URL('./executors.ts', import.meta.url), 'utf8');
-    expect(source).toContain(`label: '${RAJAL_PATIENT_OUTCOMES_EVIDENCE}'`);
+    expect(source).toContain('label: RAJAL_PATIENT_OUTCOMES_EVIDENCE');
   });
 
   it('reads outcome rows from an evidence list', () => {

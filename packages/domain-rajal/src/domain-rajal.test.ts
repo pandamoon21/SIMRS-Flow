@@ -11,40 +11,40 @@ import {
 import {
   rajalWorkflow,
   createRajalExecutors,
-  buildRajalTampungBayarPayload,
   buildRajalUnpaidReportQuery,
-  evaluateRajalExitDate,
-  evaluateRajalExitDateResponse,
-  evaluateRajalLabPdfGet,
-  evaluateRajalLabPdfHead,
-  evaluateRajalOncologyPlan,
-  evaluateRajalOrderBlocker,
-  evaluateRajalPenunjangBlocker,
   fetchRajalUnpaidBatch,
-  formatPatientId,
-  formatRajalLegacyDate,
-  isRadiologyTreatmentName,
-  isRegularLabTreatmentName,
-  mapRajalClinicToSepPoli,
   normalizeClinicLabel,
   normalizeRajalPaymentConfig,
   parseRajalUnpaidReport,
-  rajalClinicCandidates,
-  rajalPaymentTypeCode,
-  rajalShiftCode,
   resolveRajalClinicMatch,
   extractRajalClinicFromSection,
-  selectRajalUnpaidBatch,
-  verifyRajalTreatmentGroups,
-  rajalTreatmentChecklist,
   RAJAL_INSTALASI_OPTIONS,
   RAJAL_PAYMENT_TYPE_OPTIONS,
   RAJAL_SHIFT_OPTIONS,
   RAJAL_TREATMENT_TEMPLATES,
-  RAJAL_UNMAPPED_CLINIC_UNITS,
-  resolveRajalLisPdfTarget,
 } from '../src/index.js';
-import { evaluateRajalConsultVisit, isUnknownPenunjangTreatmentName, sepPoliMatches } from './legacyConfig.js';
+import { formatPatientId } from './executors.js';
+import { RAJAL_UNMAPPED_CLINIC_UNITS } from './rules.js';
+import { selectRajalUnpaidBatch } from './unpaidReport.js';
+import {
+  evaluateRajalLabPdfGet,
+  evaluateRajalLabPdfHead,
+  formatRajalLegacyDate,
+  isRadiologyTreatmentName,
+  isRegularLabTreatmentName,
+  isUnknownPenunjangTreatmentName,
+  resolveRajalLisPdfTarget,
+} from './logic/penunjang.js';
+import { mapRajalClinicToSepPoli, rajalClinicCandidates, sepPoliMatches } from './logic/sepClinic.js';
+import { evaluateRajalConsultVisit, rajalTreatmentChecklist, verifyRajalTreatmentGroups } from './logic/treatment.js';
+import { evaluateRajalExitDate, evaluateRajalExitDateResponse, evaluateRajalOncologyPlan } from './logic/visit.js';
+import {
+  buildRajalTampungBayarPayload,
+  evaluateRajalOrderBlocker,
+  evaluateRajalPenunjangBlocker,
+  rajalPaymentTypeCode,
+  rajalShiftCode,
+} from './logic/payment.js';
 
 function previewClient(overrides: Record<string, never> | Record<string, any> = {}) {
   // SEP validation reads the BPJS card from the guarantor tab and matches the

@@ -20,10 +20,9 @@ export {
   readPatientOutcomes,
 } from './nodes.js';
 export type { RajalNodeId, RajalPatientOutcome } from './nodes.js';
+export { normalizeRajalPaymentConfig } from './logic/payment.js';
+export { normalizeClinicLabel, resolveRajalClinicMatch } from './logic/sepClinic.js';
 export {
-  normalizeClinicLabel,
-  normalizeRajalPaymentConfig,
-  resolveRajalClinicMatch,
   RAJAL_CLINIC_MAPPING,
   RAJAL_DEFAULT_PAYMENT_CONFIG,
   RAJAL_DEFAULT_SKIP_TREATMENTS,
@@ -31,6 +30,6 @@ export {
   RAJAL_PAYMENT_TYPE_OPTIONS,
   RAJAL_SHIFT_OPTIONS,
   RAJAL_TREATMENT_TEMPLATES,
-} from './legacyConfig.js';
-export type { RajalPaymentConfig, RajalTreatmentGroup } from './legacyConfig.js';
-export type { RajalDiscoveryInput, RajalInput } from './executors.js';
+} from './rules.js';
+export type { RajalPaymentConfig, RajalTreatmentGroup } from './rules.js';
+export type { RajalDiscoveryInput, RajalInput } from './types.js';

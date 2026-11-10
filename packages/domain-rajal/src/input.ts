@@ -12,13 +12,9 @@
  */
 
 import { isIsoDate, optionalPositiveInteger, splitList, type RunInputResult } from '@simrs-flow/workflow-core';
-import type { RajalInput } from './executors.js';
-import {
-  normalizeRajalPaymentConfig,
-  RAJAL_INSTALASI_OPTIONS,
-  RAJAL_TREATMENT_TEMPLATES,
-  type RajalTreatmentGroup,
-} from './legacyConfig.js';
+import type { RajalInput } from './types.js';
+import { normalizeRajalPaymentConfig } from './logic/payment.js';
+import { RAJAL_INSTALASI_OPTIONS, RAJAL_TREATMENT_TEMPLATES, type RajalTreatmentGroup } from './rules.js';
 import { RAJAL_NODE } from './nodes.js';
 
 /** One treatment line in the rajal editors; unticked lines are kept but ignored. */
