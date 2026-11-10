@@ -542,7 +542,10 @@ export const ranapRuleCatalog: RuleCatalog = {
           "text": "… grup origin IGD tanpa transaksi asal"
         }
       ],
-      "findings": [],
+      "findings": [
+        "data transaksi tujuan … tidak lengkap",
+        "biaya transfer … kosong"
+      ],
       "actions": [
         {
           "endpointId": "poliklinik.transferIgd",
@@ -595,7 +598,10 @@ export const ranapRuleCatalog: RuleCatalog = {
           "text": "…"
         }
       ],
-      "findings": [],
+      "findings": [
+        "data transaksi tujuan … tidak lengkap",
+        "biaya transfer … kosong"
+      ],
       "actions": [
         {
           "endpointId": "poliklinik.updateTgl",

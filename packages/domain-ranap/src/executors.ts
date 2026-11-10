@@ -103,10 +103,24 @@ import {
   deriveIgdSourceSignal,
   detectGroupOriginFromRows,
   buildSkippedOriginInfo,
-  extractSepKeysFromRoomRows,
+  buildIgdOriginTarget,
+  buildPoliOriginTarget,
+  chooseOrigin,
+  poliOriginCandidateWindow,
+  scoreIgdOriginCandidate,
+  scorePoliOriginCandidate,
   type IgdSourceSignal,
   type OriginInfo,
+  type PoliCandidateWindow,
+  type ScoredOriginCandidate,
 } from './logic/origin.js';
+import {
+  IGD_TRANSFER_POLICY,
+  POLI_TRANSFER_POLICY,
+  decideOriginTransfer,
+  needsTransferDestination,
+  pendingTransferRows,
+} from './logic/originTransfer.js';
 import {
   checkMissingIgdDepoOrObatForVerification,
   collectBankDarahBlockers,
@@ -943,27 +957,6 @@ function batalTransferPoliPayload(noTransaksi: string, kdUnit: string): Record<s
     no_transaksipoli: noTransaksi,
     no_transaksi: noTransaksi,
     kd_unit: kdUnit,
-  };
-}
-
-/** `transfer_tagihan_igd` (ranap_v3.py:6392), despite the name, also transfers POLI source bills. */
-function transferIgdPayload(op: {
-  noTransaksi: string;
-  noTransaksiPoli: string;
-  kdUnitPoli: string;
-  kdDetkelpenjamin: string;
-  biaya: string;
-  kdUnit: string;
-  kdTindakan: string;
-}): Record<string, string> {
-  return {
-    no_transaksi: op.noTransaksi,
-    no_transaksipoli: op.noTransaksiPoli,
-    kd_unit_poli: op.kdUnitPoli,
-    Kd_DetKelPenjamin: op.kdDetkelpenjamin,
-    biaya: op.biaya,
-    kd_unit: op.kdUnit,
-    kd_tindakan: op.kdTindakan,
   };
 }
 
@@ -2824,47 +2817,23 @@ export function createRanapExecutors(deps: RanapDeps): ExecutorRegistry {
         // way `proses_transfer_igd` (ranap_v3.py:9215-9240) reads it: the
         // destination transaction from the IGD registration, the still-pending
         // charge codes joined with the literal `','`, and the transfer amount.
+        // The decision — missing fields, fallbacks, plan shape, read-back checks —
+        // is `decideOriginTransfer` (logic/originTransfer.ts), shared with POLI.
         const igdReg = str(source, 'no_registrasikunjungan');
         const destination = await fetchPoliLinkedTransaksi(ctx, client, input.noRm, igdReg);
-        const noTransaksiPoli = str(destination, 'no_transaksi');
-        const kdUnitPoli = str(destination, 'kd_unit');
-        const kdDetkelpenjamin = str(destination, 'kd_detkelpenjamin') || '15';
-        const pending = (await fetchPoliListTindakan(ctx, client, igdTrx)).filter(
-          (row) => !isTransferredRow(row),
-        );
-        const kdTindakanList = sortedRows(pending)
-          .map((row) => str(row, 'kd_tindakan'))
-          .filter(Boolean);
+        const pending = pendingTransferRows(await fetchPoliListTindakan(ctx, client, igdTrx));
         const biaya = await softText(ctx, client, 'poliklinik.cekJumlahTransfer', {
           no_transaksi: igdTrx,
         });
-
-        const payloadSummary = {
-          no_registrasikunjungan: reg,
-          igd_trx: igdTrx,
-          igd_reg: igdReg || '-',
-          no_transaksipoli: noTransaksiPoli || '-',
-          biaya: biaya || '-',
-          tindakan: kdTindakanList.length,
-        };
-        // The Python refuses the transfer outright when any of these is missing
-        // (ranap_v3.py:9221, 9232, 9238); a plan built on a blank destination or
-        // a blank amount would post nonsense.
-        const missingField =
-          !noTransaksiPoli || !kdUnitPoli
-            ? 'data transaksi tujuan IGD tidak lengkap'
-            : kdTindakanList.length === 0
-              ? 'tidak ada tindakan IGD yang masih pending transfer'
-              : !biaya.trim()
-                ? 'biaya transfer IGD kosong'
-                : '';
-        if (kdTindakanList.length === 0 && noTransaksiPoli && kdUnitPoli) {
+        const decision = decideOriginTransfer(IGD_TRANSFER_POLICY, { reg, source, pending, destination, biaya });
+        if (decision.verdict === 'settled' || decision.verdict === 'skip') {
           ctx.log(`- IGD asal sudah tertransfer seluruhnya | trx=${igdTrx}`);
           igdChecks.push({ label: `${igdPrefix(reg)}Tagihan IGD ${igdTrx} sudah ditransfer ke rawat inap`, ok: true });
           settled.push(reg);
           continue;
         }
-        if (missingField) {
+        if (decision.verdict === 'missing') {
+          const missingField = decision.reason;
           ctx.log(`- Skip transfer IGD | trx=${igdTrx} | alasan=${missingField}`, 'warn');
           alertsOf(ctx).registerRegAlert(reg, 'WARN', `Transfer IGD asal dilewati | ${missingField}`);
           igdChecks.push({ label: `${igdPrefix(reg)}Tagihan IGD ${igdTrx} sudah ditransfer ke rawat inap`, ok: false, detail: `tidak bisa ditransfer otomatis: ${missingField}` });
@@ -2886,36 +2855,12 @@ export function createRanapExecutors(deps: RanapDeps): ExecutorRegistry {
               PRECONDITION.igdOrderSelesai(igdTrx),
               PRECONDITION.igdBiayaTransferAda(igdTrx),
             ],
-            payload: transferIgdPayload({
-              noTransaksi: igdTrx,
-              noTransaksiPoli,
-              kdUnitPoli,
-              kdDetkelpenjamin,
-              biaya,
-              // The IGD unit itself, not the destination's (ranap_v3.py:9257).
-              kdUnit: str(source, 'kd_unit'),
-              // "format sesuai HAR: 38','16','1929…" — the legacy comment at
-              // ranap_v3.py:9201. One code stays a bare code, no separator.
-              kdTindakan: kdTindakanList.join("','"),
-            }),
-            payloadSummary,
-            readAfterWriteChecks: sortedRows(pending)
-              .filter((row) => str(row, 'kd_tindakan') && str(row, 'urut_tindakan'))
-              .map((row) => ({
-                description: `Tindakan IGD ${str(row, 'kd_tindakan')}#${str(row, 'urut_tindakan')} terbaca sudah transfer`,
-                endpointId: 'poliklinik.cekStatusTransfer',
-                field: '',
-                expected: '1',
-                match: 'nonEmpty',
-                payload: {
-                  no_transaksi: igdTrx,
-                  kd_tindakan: str(row, 'kd_tindakan'),
-                  urut_tindakan: str(row, 'urut_tindakan'),
-                },
-              })),
+            payload: decision.payload,
+            payloadSummary: decision.payloadSummary,
+            readAfterWriteChecks: decision.readAfterWriteChecks,
           }),
         );
-        igdChecks.push({ label: `${igdPrefix(reg)}Tagihan IGD ${igdTrx} sudah ditransfer ke rawat inap`, ok: false, detail: `${kdTindakanList.length} tindakan belum — transfer`, planId: plans[plans.length - 1]!.id });
+        igdChecks.push({ label: `${igdPrefix(reg)}Tagihan IGD ${igdTrx} sudah ditransfer ke rawat inap`, ok: false, detail: `${decision.kdTindakanList.length} tindakan belum — transfer`, planId: plans[plans.length - 1]!.id });
       }
 
       const igdTitle = 'Tagihan IGD asal harus pindah ke tagihan rawat inap';
@@ -3150,28 +3095,25 @@ export function createRanapExecutors(deps: RanapDeps): ExecutorRegistry {
           continue;
         }
 
-        const pending = sourceRows.filter((row) => !isTransferredRow(row));
-        const kdTindakanList = sortedRows(pending)
-          .map((row) => str(row, 'kd_tindakan'))
-          .filter(Boolean);
-        if (kdTindakanList.length === 0) {
+        // Shared with IGD: `decideOriginTransfer` (logic/originTransfer.ts). The
+        // POLI policy checks "nothing pending" first, so the destination and
+        // amount are only read when there is something to move.
+        const pending = pendingTransferRows(sourceRows);
+        const needsDestination = needsTransferDestination(POLI_TRANSFER_POLICY, pending);
+        const poliReg = str(source, 'no_registrasikunjungan');
+        const destination = needsDestination
+          ? await fetchPoliLinkedTransaksi(ctx, client, input.noRm, poliReg)
+          : undefined;
+        const biaya = needsDestination
+          ? await softText(ctx, client, 'poliklinik.cekJumlahTransfer', { no_transaksi: poliTrx })
+          : '';
+        const decision = decideOriginTransfer(POLI_TRANSFER_POLICY, { reg, source, pending, destination, biaya });
+        if (decision.verdict === 'skip' || decision.verdict === 'settled') {
           ctx.log(`- Tidak ada tagihan POLI asal yang perlu ditransfer | trx=${poliTrx}`, 'debug');
           continue;
         }
-
-        const poliReg = str(source, 'no_registrasikunjungan');
-        const destination = await fetchPoliLinkedTransaksi(ctx, client, input.noRm, poliReg);
-        const noTransaksiPoli = str(destination, 'no_transaksi');
-        const kdUnitPoli = str(destination, 'kd_unit');
-        const kdDetkelpenjamin = str(destination, 'kd_detkelpenjamin') || str(source, 'kd_detkelpenjamin') || '15';
-        const biaya = await softText(ctx, client, 'poliklinik.cekJumlahTransfer', { no_transaksi: poliTrx });
-        const missingField =
-          !noTransaksiPoli || !kdUnitPoli
-            ? 'data transaksi tujuan POLI tidak lengkap'
-            : !biaya.trim()
-              ? 'biaya transfer POLI kosong'
-              : '';
-        if (missingField) {
+        if (decision.verdict === 'missing') {
+          const missingField = decision.reason;
           ctx.log(`- Skip transfer POLI | trx=${poliTrx} | alasan=${missingField}`, 'warn');
           alertsOf(ctx).registerRegAlert(reg, 'WARN', `Transfer POLI asal dilewati | ${missingField}`);
           missing.push(reg);
@@ -3190,38 +3132,9 @@ export function createRanapExecutors(deps: RanapDeps): ExecutorRegistry {
               PRECONDITION.igdOrderSelesai(poliTrx),
               PRECONDITION.igdBiayaTransferAda(poliTrx),
             ],
-            payload: transferIgdPayload({
-              noTransaksi: poliTrx,
-              noTransaksiPoli,
-              kdUnitPoli,
-              kdDetkelpenjamin,
-              biaya,
-              kdUnit: str(source, 'kd_unit'),
-              kdTindakan: kdTindakanList.join("','"),
-            }),
-            payloadSummary: {
-              no_registrasikunjungan: reg,
-              poli_trx: poliTrx,
-              poli_reg: poliReg || '-',
-              no_transaksipoli: noTransaksiPoli,
-              biaya,
-              tindakan: kdTindakanList.length,
-              perubahan: `${kdTindakanList.length} tindakan POLI ${poliTrx} (Rp ${Number(biaya).toLocaleString('id-ID')}) → tagihan rawat inap ${noTransaksiPoli}`,
-            },
-            readAfterWriteChecks: sortedRows(pending)
-              .filter((row) => str(row, 'kd_tindakan') && str(row, 'urut_tindakan'))
-              .map((row) => ({
-                description: `Tindakan POLI ${str(row, 'kd_tindakan')}#${str(row, 'urut_tindakan')} terbaca sudah transfer`,
-                endpointId: 'poliklinik.cekStatusTransfer',
-                field: '',
-                expected: '1',
-                match: 'nonEmpty',
-                payload: {
-                  no_transaksi: poliTrx,
-                  kd_tindakan: str(row, 'kd_tindakan'),
-                  urut_tindakan: str(row, 'urut_tindakan'),
-                },
-              })),
+            payload: decision.payload,
+            payloadSummary: decision.payloadSummary,
+            readAfterWriteChecks: decision.readAfterWriteChecks,
           }),
         );
       }
@@ -6142,31 +6055,8 @@ async function fetchDirectHasilPages(
 }
 
 // ── origin source lookups ────────────────────────────────────────
-
-/** Element-wise descending compare over a score tuple — Python's `reverse=True`. */
-function compareScoresDesc(a: readonly (number | string)[], b: readonly (number | string)[]): number {
-  for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
-    const av = a[i];
-    const bv = b[i];
-    if (av === undefined || bv === undefined) continue;
-    if (typeof av === 'number' && typeof bv === 'number') {
-      if (av !== bv) return bv - av;
-      continue;
-    }
-    const as = String(av);
-    const bs = String(bv);
-    if (as !== bs) return bs < as ? -1 : 1;
-  }
-  return 0;
-}
-
-/** `abs((a.date() - b.date()).days)`, or `999` when either date is unreadable. */
-function absDiffDays(a: Date | null, b: Date | null): number {
-  if (!a || !b) return 999;
-  const ua = Date.UTC(a.getFullYear(), a.getMonth(), a.getDate());
-  const ub = Date.UTC(b.getFullYear(), b.getMonth(), b.getDate());
-  return Math.abs(Math.round((ua - ub) / 86_400_000));
-}
+// The reads live here; acceptance, scoring, tolerance and ranking are the pure
+// choose-origin functions in logic/origin.ts.
 
 /** `get_datatransaksi_poli_igd` (ranap_v3.py:3437) — `kd_unit` is hard-coded. */
 async function fetchPoliLinkedTransaksi(
@@ -6215,19 +6105,10 @@ async function findRelatedIgdSourceForGroup(
   client: EvoMedisClient,
   args: FindRelatedIgdSourceArgs,
 ): Promise<LegacyRow | undefined> {
-  const tolerance = clampToleranceDays(args.toleranceDays);
-  const targetDt = parseDateFlexible(args.tanggal);
-  const transaksiInap = new Set(
-    args.roomRows.map((row) => str(row, 'no_transaksi')).filter(Boolean),
-  );
-  const registrasiInap = new Set(
-    args.roomRows.map((row) => str(row, 'no_registrasikunjungan')).filter(Boolean),
-  );
-  const targetSepKeys = new Set(
-    extractSepKeysFromRoomRows(args.roomRows, args.noRm, args.dataKunjunganByTrx),
-  );
-
-  const candidates: Array<{ score: (number | string)[]; row: LegacyRow }> = [];
+  const target = buildIgdOriginTarget(args);
+  const candidates: ScoredOriginCandidate[] = [];
+  // Only *accepted* IGD transactions are skipped on a later row; a rejected one
+  // is read again if another row points at it (same as the Python's `seen`).
   const seen = new Set<string>();
 
   const appendCandidate = async (
@@ -6239,10 +6120,6 @@ async function findRelatedIgdSourceForGroup(
     if (!parentIgd || !rowReg || seen.has(parentIgd)) return;
 
     const linked = await fetchPoliLinkedTransaksi(ctx, client, args.noRm, rowReg);
-    const linkedTrx = str(linked, 'no_transaksi');
-    const linkedReg = str(linked, 'no_registrasikunjungan');
-    const linkedMatch =
-      transaksiInap.size === 0 || transaksiInap.has(linkedTrx) || registrasiInap.has(linkedReg);
 
     // `ambil_datakunjungan_poli` first, then the inpatient `getdatakunjungan`
     // (ranap_v3.py:13828-13835).
@@ -6262,43 +6139,13 @@ async function findRelatedIgdSourceForGroup(
     const signal =
       args.igdSignalByTrx[parentIgd] ??
       deriveIgdSourceSignal(await fetchPoliListTindakan(ctx, client, parentIgd));
-    const sourceSep = str(sourceRow, 'no_sjp', 'no_sep');
-    const sepMatch = targetSepKeys.size > 0 && Boolean(sourceSep) && targetSepKeys.has(sourceSep);
-    if (!linkedMatch && !sepMatch) return;
-
-    let diffDays = 999;
-    if (targetDt && sourceDt) {
-      diffDays = absDiffDays(sourceDt, targetDt);
-      if (diffDays > tolerance) return;
-    }
-
+    const candidate = scoreIgdOriginCandidate(
+      { parentIgd, rowReg, sourceNoTransaksi, sourceDt, linked, sourceRow, signal },
+      target,
+    );
+    if (!candidate) return;
     seen.add(parentIgd);
-    candidates.push({
-      score: [
-        linkedMatch ? 1 : 0,
-        sepMatch ? 1 : 0,
-        sourceNoTransaksi ? 1 : 0,
-        signal.hasHemodialisaSignal ? 1 : 0,
-        diffDays === 0 ? 1 : 0,
-        -diffDays,
-        parentIgd,
-      ],
-      row: {
-        no_transaksi: parentIgd,
-        no_registrasikunjungan: rowReg,
-        source_no_transaksi: sourceNoTransaksi,
-        linked_inap_trx: linkedTrx,
-        linked_inap_reg: linkedReg,
-        source_sep: sourceSep,
-        kd_unit: str(sourceRow, 'kd_unit'),
-        kd_detkelpenjamin: str(sourceRow, 'kd_detkelpenjamin'),
-        nama_unit: str(sourceRow, 'nama_unit'),
-        tgl_masuk: str(sourceRow, 'tgl_masuk'),
-        has_hemodialisa_signal: signal.hasHemodialisaSignal,
-        matched_names: [...signal.matchedNames],
-        detail: sourceRow ?? {},
-      },
-    });
+    candidates.push(candidate);
   };
 
   for (const row of args.elektromedikHistory) {
@@ -6335,9 +6182,7 @@ async function findRelatedIgdSourceForGroup(
     }
   }
 
-  if (candidates.length === 0) return undefined;
-  candidates.sort((a, b) => compareScoresDesc(a.score, b.score));
-  return candidates[0]?.row;
+  return chooseOrigin(candidates);
 }
 
 interface FindRelatedPoliSourceArgs {
@@ -6363,7 +6208,6 @@ async function findRelatedPoliSource(
   client: EvoMedisClient,
   args: FindRelatedPoliSourceArgs,
 ): Promise<LegacyRow | undefined> {
-  const tolerance = clampToleranceDays(args.toleranceDays);
   const noTransaksiInap = str(args.kunjunganInap, 'no_transaksi');
   if (!noTransaksiInap.startsWith('03-')) return undefined;
 
@@ -6372,94 +6216,30 @@ async function findRelatedPoliSource(
       txtmedrec_inap: args.noRm,
       no_transaksi: noTransaksiInap,
     })) ?? {};
-  const originText = upper(dataInap, 'nama_rujukanasal');
-  const originKey = normalizeTextKey(originText);
-  const tglRef = datePart(
-    args.tanggal || str(dataInap, 'tgl_masuk') || str(args.kunjunganInap, 'tgl_masuk'),
-  );
-  const tglRefDt = parseDateFlexible(tglRef);
-  const kdParamedisInap = str(dataInap, 'kd_paramedis');
-  const registrasiInap = str(args.kunjunganInap, 'no_registrasikunjungan');
-  const targetSepKeys = new Set(extractSepKeysFromRoomRows([args.kunjunganInap], args.noRm, {}));
+  const target = buildPoliOriginTarget({ ...args, dataInap });
 
-  const candidates: Array<{ score: (number | string)[]; row: LegacyRow }> = [];
+  // Facts first: the date window is decided before any read for a row, then
+  // each surviving row's link and detail are read, then one pure pass decides.
+  const facts: Array<{ row: LegacyRow; window: PoliCandidateWindow; linked: LegacyRow | undefined; detail: LegacyRow }> = [];
   for (const row of args.poliHistory) {
-    const noTransaksiPoli = str(row, 'no_transaksi');
-    const noRegPoli = str(row, 'no_registrasikunjungan');
-    if (!noTransaksiPoli.startsWith('01-') || !noRegPoli) continue;
-
-    const rowDate = datePart(str(row, 'tgl_masuk'));
-    const rowDt = parseDateFlexible(rowDate);
-    let diffDays = 999;
-    if (tglRefDt && rowDt) {
-      const signed = Math.round(
-        (Date.UTC(rowDt.getFullYear(), rowDt.getMonth(), rowDt.getDate()) -
-          Date.UTC(tglRefDt.getFullYear(), tglRefDt.getMonth(), tglRefDt.getDate())) /
-          86_400_000,
-      );
-      // A clinic visit dated after the admission is not its source.
-      if (signed > 0 || Math.abs(signed) > tolerance) continue;
-      diffDays = signed;
-    }
-
-    const linked = await fetchPoliLinkedTransaksi(ctx, client, args.noRm, noRegPoli);
-    const linkedTrx = str(linked, 'no_transaksi');
-    const linkedReg = str(linked, 'no_registrasikunjungan');
+    const window = poliOriginCandidateWindow(row, target);
+    if (!window) continue;
+    const linked = await fetchPoliLinkedTransaksi(ctx, client, args.noRm, window.noRegPoli);
     const detail =
       (await softJson<LegacyRow>(ctx, client, 'poliklinik.getDataKunjungan', {
         txtmedrec_poli: args.noRm,
-        no_transaksi: noTransaksiPoli,
-        tgl_masuk: rowDate,
-        no_registrasikunjungan: noRegPoli,
+        no_transaksi: window.noTransaksiPoli,
+        tgl_masuk: window.rowDate,
+        no_registrasikunjungan: window.noRegPoli,
       })) ?? {};
-
-    const kdParamedisPoli = str(detail, 'kd_paramedis');
-    const sourceSep = str(detail, 'no_sjp', 'no_sep');
-    const namaUnitPoli = str(detail, 'nama_unit') || str(row, 'nama_unit');
-    const unitKey = normalizeTextKey(namaUnitPoli);
-    const linkedMatch =
-      (Boolean(linkedTrx) && linkedTrx === noTransaksiInap) ||
-      (Boolean(linkedReg) && linkedReg === registrasiInap);
-    const doctorMatch = Boolean(kdParamedisInap) && kdParamedisPoli === kdParamedisInap;
-    const consultMatch = originText.includes('KONSULTASI');
-    const unitMatch =
-      Boolean(unitKey) && Boolean(originKey) && (originKey.includes(unitKey) || unitKey.includes(originKey));
-    const sepMatch = targetSepKeys.size > 0 && Boolean(sourceSep) && targetSepKeys.has(sourceSep);
-    const exactDate = rowDate === tglRef;
-    const fallbackMatch =
-      sepMatch || unitMatch || (consultMatch && doctorMatch) || (doctorMatch && exactDate);
-    if (!linkedMatch && !fallbackMatch) continue;
-
-    candidates.push({
-      score: [
-        linkedMatch ? 1 : 0,
-        sepMatch ? 1 : 0,
-        unitMatch ? 1 : 0,
-        doctorMatch ? 1 : 0,
-        consultMatch ? 1 : 0,
-        exactDate ? 1 : 0,
-        -Math.abs(diffDays),
-        rowDate,
-      ],
-      row: {
-        no_transaksi: noTransaksiPoli,
-        no_registrasikunjungan: noRegPoli,
-        nama_unit: str(row, 'nama_unit'),
-        tgl_masuk: rowDate,
-        kd_unit: str(detail, 'kd_unit') || str(row, 'kd_unit'),
-        kd_paramedis: kdParamedisPoli,
-        kd_detkelpenjamin: str(detail, 'kd_detkelpenjamin') || str(linked, 'kd_detkelpenjamin'),
-        linked_inap_trx: linkedTrx,
-        linked_inap_reg: linkedReg,
-        source_sep: sourceSep,
-        detail,
-      },
-    });
+    facts.push({ row, window, linked, detail });
   }
 
-  if (candidates.length === 0) return undefined;
-  candidates.sort((a, b) => compareScoresDesc(a.score, b.score));
-  return candidates[0]?.row;
+  return chooseOrigin(
+    facts
+      .map((f) => scorePoliOriginCandidate(f.row, f.window, f.linked, f.detail, target))
+      .filter((c): c is ScoredOriginCandidate => c !== undefined),
+  );
 }
 
 /**
