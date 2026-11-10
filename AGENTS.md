@@ -51,7 +51,7 @@ Concrete data flow for one preview run:
 | `apps/ui/src/` | React app: `app/App.tsx` shell (no router, local page state), `session/runSession.ts` (pure-TS run session: start/stream/replay/commands via a live or fixture-replay adapter; fixtures load by dynamic `import()` only), `store/runStore.ts` (Zustand projection), `api/client.ts` (REST + SSE), `features/{canvas,panels,run,history,review,dashboard,settings}/` (presentational), `ui/primitives.tsx` |
 | `apps/orchestrator/src/` | Fastify API: `main.ts` (wiring), `server.ts` (routes), `RunService.ts` (orchestration core, composes `runApprovals.ts` gate/plan approvals + auto-approve queue, `replanBarrier.ts`, `simrsAccess.ts` session→transport, `runHistory.ts` ledger summaries + cache rule), `registry.ts` (`WORKFLOWS`), `mutationGate.ts`, `locks.ts`, `sessions.ts`, `auth.ts`, `reloginTransport.ts`, `config.ts`, `rules.ts` (rule catalog serving), `naikKelas.ts` (IUR naik kelas logic) |
 | `packages/workflow-core/src/` | Framework-agnostic engine: `types.ts` (single source of truth for all contracts), `runner.ts`, `reducer.ts`, `eventBus.ts`, `definition.ts`, `expectations.ts`, `jsonl.ts`, `ids.ts`, `reasoning.ts` |
-| `packages/domain-*/src/ruleCatalog.generated.ts` | **Generated — do not hand-edit.** Rebuilt by `scripts/gen-rule-catalog.ts`; `ruleCatalog.test.ts` fails when the committed file is stale |
+| `packages/domain-*/src/outcomes.ts` | Declared outcomes per node (status + summary template, issue codes, findings, planned writes, reads). `ruleCatalog.ts` builds the Rules page catalog from them (`buildRuleCatalog`, workflow-core `outcomes.ts`). The last test in `domain-*.test.ts` records every executor result of every fixture run and fails on any status/summary, issue code or planned write a node does not declare |
 | `packages/evomedis-client/src/` | Typed safety-gated SIMRS client: `client.ts`, `endpoints.ts` (registry + `isMutating`), `errors.ts`, `session.ts`, `transport.ts` (`FetchTransport`, `FixtureTransport`), `parsers.ts` |
 | `packages/domain-ranap/src/` | Inpatient workflow (`workflow.ts`), I/O shell (`executors.ts`, very large), pure decision rules in `logic/*.ts` (co-located `*.test.ts`) |
 | `packages/domain-rajal/src/` | Outpatient batch workflow + `legacyConfig.ts` (ported verdicts/config) |
@@ -91,11 +91,7 @@ npx vitest run --coverage
 
 Windows helpers — `run.bat` wraps everything (`install|dev|ui|api|typecheck|lint|test|test:watch|livetest|build|start|clean|free-port`), auto-installs deps and loads `.env`; `run.bat build` additionally deletes emitted `.js`/`.d.ts` next to source (they would otherwise shadow `.ts` under Vitest/tsx).
 
-Regenerate the rule catalog after editing any executor (`executors.ts`); the domain test fails until you do:
-
-```bash
-node --import tsx scripts/gen-rule-catalog.ts
-```
+When an executor change adds, removes or rewords a step outcome (status/summary, issue code, planned write), update that node in `packages/domain-*/src/outcomes.ts` in the same change; the domain test's "declared outcomes" check fails until you do. `…` in a template stands for a runtime value.
 
 Live harnesses (hit the real EvoMedis host, never part of `npm test`):
 

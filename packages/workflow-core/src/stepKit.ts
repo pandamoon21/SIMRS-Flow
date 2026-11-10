@@ -11,9 +11,9 @@
  * helpers take the client *structurally* ({@link StepReadClient}), so this
  * package never imports `@simrs-flow/evomedis-client`.
  *
- * The outcome helper names (`ok`, `fail`, `blocked`, `skipped`, `review`,
- * `planResult`, `warning`) are load-bearing: `scripts/gen-rule-catalog.ts`
- * recognises a call by its callee name when it scrapes executor sources.
+ * What a step can return is declared per node in each domain's `outcomes.ts`
+ * and checked against real results (see `./outcomes.ts`), not read off these
+ * helper calls.
  */
 
 import type { ExecutorContext, IssueSeverity, MutationPlan, StepResult, WorkflowIssue } from './types.js';

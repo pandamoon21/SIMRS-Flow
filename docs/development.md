@@ -151,7 +151,7 @@ Before merging documentation or deployment changes:
 5. Give every step an operator checklist (`reasoningEvidence` from
    `@simrs-flow/workflow-core`, see `docs/architecture.md` "Step reasoning") and
    a coverage test like "rajal checklist coverage". After changing executors,
-   run `node --import tsx scripts/gen-rule-catalog.ts` — the generated rule
-   catalog test fails otherwise. The generator treats any `'domain.name'`
-   property in the executor file as a registry entry, so do not use that key
-   shape for helper maps.
+   declare each node's outcomes in `src/outcomes.ts` (the rule catalog is built
+   from it) and wrap the executors with `recordStepResults` in the domain test,
+   ending with an `undeclaredOutcomes(...)` check like "rajal declared
+   outcomes"; a step result nobody declared then fails the suite.

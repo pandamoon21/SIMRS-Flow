@@ -6,7 +6,7 @@
  */
 
 export { OPT_IN_NODES, ranapWorkflow } from './workflow.js';
-export { ranapRuleCatalog } from './ruleCatalog.generated.js';
+export { ranapRuleCatalog } from './ruleCatalog.js';
 export { BANK_DARAH_UNIT_KEYWORDS, CATHLAB_UNIT_KEYWORDS } from './logic/blockers.js';
 export { IBS_MANUAL_REVIEW_ROOM_TOKEN } from './logic/ibs.js';
 

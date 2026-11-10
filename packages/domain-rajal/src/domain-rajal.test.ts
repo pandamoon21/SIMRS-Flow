@@ -1,5 +1,6 @@
 ﻿import { describe, it, expect } from 'vitest';
-import { WorkflowRunner, evaluateExpectation, reasoningOf, verificationRulesOf } from '@simrs-flow/workflow-core';
+import { WorkflowRunner, evaluateExpectation, reasoningOf, recordStepResults, undeclaredOutcomes, verificationRulesOf } from '@simrs-flow/workflow-core';
+import type { RecordedStepResult } from '@simrs-flow/workflow-core';
 import { EvoMedisClient, FixtureTransport, isMutating, type TransportRequest } from '@simrs-flow/evomedis-client';
 import {
   rajalFixtures,
@@ -10,7 +11,7 @@ import {
 } from '@simrs-flow/test-fixtures';
 import {
   rajalWorkflow,
-  createRajalExecutors,
+  createRajalExecutors as createRajalExecutorsUnrecorded,
   buildRajalUnpaidReportQuery,
   fetchRajalUnpaidBatch,
   normalizeClinicLabel,
@@ -45,6 +46,12 @@ import {
   rajalPaymentTypeCode,
   rajalShiftCode,
 } from './logic/payment.js';
+import { RAJAL_OUTCOMES } from './outcomes.js';
+
+/** Every executor result of every run in this file; the last test checks them against `outcomes.ts`. */
+const recorded: RecordedStepResult[] = [];
+const createRajalExecutors = (deps: Parameters<typeof createRajalExecutorsUnrecorded>[0]) =>
+  recordStepResults(rajalWorkflow, createRajalExecutorsUnrecorded(deps), (r) => recorded.push(r));
 
 function previewClient(overrides: Record<string, never> | Record<string, any> = {}) {
   // SEP validation reads the BPJS card from the guarantor tab and matches the
@@ -2925,5 +2932,14 @@ describe('rajal kelengkapan berkas (opt-in)', () => {
     expect(lines.some((l) => /2\. Lembar verifikasi rawat jalan ✓ hal\. 4/.test(l))).toBe(true);
     // The notice does not take visits out of the batch.
     expect(result.state.nodes.validate_sep!.status).not.toBe('pending');
+  });
+});
+
+// Last in the file on purpose: it checks what every run above returned.
+describe('rajal declared outcomes', () => {
+  it('cover every status/summary, issue code and planned write the fixture runs produced', (ctx) => {
+    // Nothing recorded means this test was picked alone (`-t`); there is nothing to check.
+    if (recorded.length === 0) ctx.skip();
+    expect(undeclaredOutcomes(RAJAL_OUTCOMES, recorded)).toEqual([]);
   });
 });

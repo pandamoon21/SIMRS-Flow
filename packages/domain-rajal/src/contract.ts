@@ -7,7 +7,7 @@
  */
 
 export { OPT_IN_NODES, rajalWorkflow } from './workflow.js';
-export { rajalRuleCatalog } from './ruleCatalog.generated.js';
+export { rajalRuleCatalog } from './ruleCatalog.js';
 export { buildRajalInput, rajalMaxPatients, templateRowsToGroups, treatmentGroupsFromRows } from './input.js';
 export type { RajalBatchMode, RajalDraft, RequiredLogic, TreatmentRow } from './input.js';
 export {

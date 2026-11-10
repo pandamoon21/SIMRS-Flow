@@ -680,7 +680,7 @@ export type NodeExecutor<TData = unknown> = (
 export type ExecutorRegistry = Record<string, NodeExecutor>;
 
 // ───────────────────────────────────────────────────────────────
-// Rule catalog (generated from executor source by scripts/gen-rule-catalog.ts)
+// Rule catalog (built from each domain's declared outcomes, see outcomes.ts)
 // ───────────────────────────────────────────────────────────────
 
 /** One endpoint a step touches, copied from the EvoMedis registry. */
@@ -692,8 +692,8 @@ export interface RuleCatalogEndpoint {
 }
 
 /**
- * What one node's executor can conclude and touch. Texts are the literal
- * summaries/messages in source; `…` marks a value filled in at runtime.
+ * What one node's executor can conclude and touch, as the domain declares it
+ * (`outcomes.ts`); `…` marks a value filled in at runtime.
  */
 export interface RuleCatalogEntry {
   nodeId: string;

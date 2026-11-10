@@ -121,8 +121,8 @@ function RuleCard({ row, catalog, query }: { row: RuleRow; catalog: RuleCatalog;
 
 /**
  * Read-only catalog of what each ranap/rajal step checks, concludes and may
- * write — generated from executor source (scripts/gen-rule-catalog.ts), so it
- * always matches the code that runs.
+ * write — the domains' declared outcomes (`packages/domain-{ranap,rajal}/src/outcomes.ts`),
+ * which the domain tests check against every result the executors return.
  */
 export function RuleCatalogPage({ onUnauthorized, onDirtyChange }: { onUnauthorized: () => void; onDirtyChange?: (dirty: boolean) => void }) {
   const [domain, setDomain] = useState<'ranap' | 'rajal'>('ranap');
