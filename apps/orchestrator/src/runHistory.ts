@@ -101,6 +101,7 @@ export class RunHistory {
   summary(runId: string, history: LedgerHistory): RunSummary {
     const meta = history.meta;
     const replayProblem = this.replayProblem(history);
+    const failure = history.status === 'failed' ? failureMessage(history) : undefined;
     return {
       runId: meta?.runId ?? runId,
       workflowId: meta?.workflowId ?? 'unknown',
@@ -112,7 +113,7 @@ export class RunHistory {
       ...(meta?.operator ? { operator: meta.operator } : {}),
       replayable: !replayProblem,
       source: 'ledger',
-      ...(replayProblem ? { reason: replayProblem } : {}),
+      ...(replayProblem ? { reason: replayProblem } : failure ? { reason: failure } : {}),
       ...(history.truncatedTail ? { truncatedTail: true } : {}),
     };
   }
@@ -126,4 +127,13 @@ export class RunHistory {
   projection<T>(options?: HistoryProjectionOptions): HistoryProjection<T> {
     return new HistoryProjection<T>(this.ledger, this.isLive, options);
   }
+}
+
+/** The `run.failed` message of a finished run, as the in-memory summary reports it. */
+function failureMessage(history: LedgerHistory): string | undefined {
+  for (let i = history.events.length - 1; i >= 0; i -= 1) {
+    const event = history.events[i];
+    if (event?.type === 'run.failed') return typeof event.message === 'string' && event.message ? event.message : undefined;
+  }
+  return undefined;
 }

@@ -1179,6 +1179,20 @@ describe('RunService memory retention', () => {
     expect(await service.getState(oldest!)).toBeDefined();
   });
 
+  it('reports why a run failed, live and from the ledger, so History can tell a held preview gate', async () => {
+    const ledger = new MemoryLedger();
+    const live = new RunService(ledger);
+    const { runId } = await live.createRun({ workflowId: ranapWorkflow.id, mode: 'preview', input: RANAP_HAPPY_INPUT });
+    await live.waitFor(runId);
+
+    const memory = (await live.listRuns()).find((run) => run.runId === runId);
+    expect(memory).toMatchObject({ source: 'memory', status: 'failed' });
+    expect(memory?.reason).toMatch(/Preview — gate ditahan/);
+
+    const fromLedger = (await new RunService(ledger).listRuns()).find((run) => run.runId === runId);
+    expect(fromLedger).toMatchObject({ source: 'ledger', status: 'failed', reason: memory?.reason });
+  });
+
   it('does not re-parse a finished run ledger on every listRuns', async () => {
     const ledger = new MemoryLedger();
     const service = new RunService(ledger, { retainFinishedRuns: 0 });

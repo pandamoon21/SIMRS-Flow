@@ -448,6 +448,8 @@ export class RunService {
       ...(handle.operator ? { operator: handle.operator } : {}),
       replayable: true,
       source: 'memory',
+      // Why it stopped; the UI tells a preview held at its gate from a real failure by it.
+      ...(handle.state.status === 'failed' && handle.state.summary ? { reason: handle.state.summary } : {}),
       ...(handle.ledgerError ? { auditError: handle.ledgerError } : {}),
     }));
     const historical = await this.history.listSummaries(new Set(active.map((run) => run.runId)));
