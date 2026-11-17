@@ -5,7 +5,9 @@ import { join } from 'node:path';
 import { MemoryLedger } from '@simrs-flow/audit-ledger';
 import { FixtureTransport } from '@simrs-flow/evomedis-client';
 import { ranapWorkflow } from '@simrs-flow/domain-ranap';
-import { buildServer } from '../src/server.js';
+import { buildServer, createRunService, type ServerOptions } from '../src/server.js';
+import type { RunService } from '../src/RunService.js';
+import { RuleStore } from '../src/rules.js';
 import { UserSessionStore } from '../src/sessions.js';
 import type { FastifyInstance } from 'fastify';
 import { RANAP_HAPPY_INPUT } from '@simrs-flow/test-fixtures';
@@ -15,9 +17,26 @@ let ledger: MemoryLedger;
 const QA_TOKEN = 'test-read-token';
 const AUTH = { authorization: `Bearer ${QA_TOKEN}` };
 
+/** The RunService each test app was built with (injected, not reached into). */
+const services = new WeakMap<FastifyInstance, RunService>();
+function serviceOf(a: FastifyInstance): RunService {
+  const service = services.get(a);
+  if (!service) throw new Error('app was not built by serverWithService');
+  return service;
+}
+
+/** buildServer with a prebuilt RunService wired exactly as the default. */
+function serverWithService(options: ServerOptions): FastifyInstance {
+  const rules = options.rules ?? new RuleStore();
+  const runService = createRunService(options, rules);
+  const built = buildServer({ ...options, rules, runService });
+  services.set(built, runService);
+  return built;
+}
+
 beforeEach(() => {
   ledger = new MemoryLedger();
-  app = buildServer({ ledger, qaAuth: { token: QA_TOKEN, operator: 'test-operator' } });
+  app = serverWithService({ ledger, qaAuth: { token: QA_TOKEN, operator: 'test-operator' } });
 });
 
 async function json(method: 'GET' | 'POST', url: string, payload?: unknown, headers?: Record<string, string>) {
@@ -133,8 +152,8 @@ describe('orchestrator API', () => {
     expect(created.status).toBe(201);
     const runId = created.body.runId as string;
 
-    const service = (app as any).runService;
-    const state = await service.waitFor(runId);
+    const service = serviceOf(app);
+    const state = (await service.waitFor(runId)) as any;
     expect(state.status).toBe('failed'); // gate blocks → critical gate fails run in preview
     // Up-to-gate nodes succeeded.
     expect(state.nodes.load_visits.status).toBe('success');
@@ -199,13 +218,13 @@ describe('orchestrator API — write-mode security', () => {
     });
   }
 
-  function writeApp() {
+  function writeApp(criticalApprovals?: 1 | 2) {
     const ledger = new MemoryLedger();
     const sessions = new UserSessionStore({
       baseUrlV1: 'https://simrs.example.local/x',
       transport: loginTransport(),
     });
-    return buildServer({ ledger, sessions });
+    return serverWithService({ ledger, sessions, ...(criticalApprovals ? { criticalApprovals } : {}) });
   }
 
   async function inject(
@@ -233,7 +252,7 @@ describe('orchestrator API — write-mode security', () => {
 
   async function waitForPlannedMutation(a: FastifyInstance, runId: string): Promise<string> {
     for (let attempt = 0; attempt < 200; attempt += 1) {
-      const state = await (a as any).runService.getState(runId);
+      const state = await serviceOf(a).getState(runId);
       const planned = Object.values((state?.mutations ?? {}) as Record<string, { planId?: string; status?: string }>)
         .find((outcome) => outcome.status === 'planned' && outcome.planId);
       if (planned?.planId) return planned.planId;
@@ -249,7 +268,7 @@ describe('orchestrator API — write-mode security', () => {
     nodeId = 'final_gate',
   ): Promise<void> {
     for (let attempt = 0; attempt < 400; attempt += 1) {
-      const state = await (a as any).runService.getState(runId);
+      const state = await serviceOf(a).getState(runId);
       if (state?.nodes[nodeId]?.status === 'gate_waiting') return;
       const planned = Object.values((state?.mutations ?? {}) as Record<string, { planId?: string; status?: string }>)
         .find((outcome) => outcome.status === 'planned' && outcome.planId);
@@ -382,12 +401,12 @@ describe('orchestrator API — write-mode security', () => {
     const runId = body.runId as string;
     // Let the run advance to the gate.
     await waitForGate(a, runId, AUTH);
-    const state = await (a as any).runService.getState(runId);
+    const state = (await serviceOf(a).getState(runId)) as any;
     expect(state.nodes.final_gate.status).toBe('gate_waiting');
   });
 
   it('requires two distinct operators to approve a critical gate', async () => {
-    const a = writeApp();
+    const a = writeApp(2);
     const AUTH = await authFor(a, 'alice');
     const AUTH2 = await authFor(a, 'bob');
     const created = await inject(
@@ -508,7 +527,6 @@ describe('orchestrator API — write-mode security', () => {
     expect(first.status).toBe(201);
     // The first run is paused at the gate (lock still held).
     await waitForGate(a, first.body.runId as string, AUTH);
-    await new Promise((r) => setTimeout(r, 10));
     const second = await inject(
       a,
       'POST',

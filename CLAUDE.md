@@ -12,7 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run typecheck && npm run lint && npm test   # gate before handing off a change
 npx vitest run packages/domain-rajal            # one package
 npx vitest run -t '<test name>'                 # one test
-node --import tsx scripts/gen-rule-catalog.ts   # after editing any domain executors.ts
+npx vitest run packages/domain-ranap/src/domain-ranap.test.ts   # incl. the declared-outcomes check; update outcomes.ts when it fails
 bash scripts/livetest.sh                        # E2E smoke (mock login server, no real SIMRS)
 ```
 

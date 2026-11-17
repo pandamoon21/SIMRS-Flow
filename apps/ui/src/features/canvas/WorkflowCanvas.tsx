@@ -37,7 +37,7 @@ import {
   STEP_X,
   type PhaseColumn,
 } from './phaseLayout.js';
-import type { EdgeStatus, NodeStatus } from '@simrs-flow/workflow-core';
+import { isTerminalStatus, type EdgeStatus, type NodeStatus } from '@simrs-flow/workflow-core';
 import { Button, ButtonGroup } from '../../ui/primitives.js';
 import { motionMs } from '../../ui/motion.js';
 import { decisionTrailOf, nextStepOf } from './decisionTrail.js';
@@ -45,8 +45,8 @@ import { blockBounds, buildFlexLayout, checksOf, type FlexDirection, type FlexEd
 import { FlexNode, type FlexNodeData } from './FlexNode.js';
 import { FlowEdge, type FlowEdgeData } from './FlowEdge.js';
 import { useAnimatedGraph } from './animatedGraph.js';
-import { ranapRuleCatalog } from '@simrs-flow/domain-ranap';
-import { rajalRuleCatalog } from '@simrs-flow/domain-rajal';
+import { ranapRuleCatalog } from '@simrs-flow/domain-ranap/contract';
+import { rajalRuleCatalog } from '@simrs-flow/domain-rajal/contract';
 
 
 const nodeTypes = { workflow: WorkflowNode, reference: ReferenceNode, flex: FlexNode };
@@ -199,7 +199,7 @@ export function WorkflowCanvas({ onReviewNode, onSelectExecutableNode }: Workflo
         plansVerified: outcomes.filter((outcome) => outcome?.status === 'verified').length,
         plansFailed: outcomes.filter((outcome) => outcome?.status === 'failed' || outcome?.status === 'invalidated').length,
         isWriteRun: state?.mode === 'write',
-        runEnded: Boolean(state && ['completed', 'failed', 'cancelled'].includes(state.status)),
+        runEnded: Boolean(state && isTerminalStatus(state.status)),
         trail: decisionTrailOf(rt, state?.mutations),
         reasons: reasons.checks,
         reasonsHidden: reasons.hidden,

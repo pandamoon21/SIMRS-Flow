@@ -38,18 +38,19 @@
  */
 
 import type { FixtureEntry } from '@simrs-flow/evomedis-client';
+import type { RanapInput } from '@simrs-flow/domain-ranap/contract';
 
 export const RANAP_HAPPY_INPUT = {
   noRm: '012345',
   tanggal: '2026-06-10',
   toleranceDays: 3,
-};
+} satisfies RanapInput;
 
 /** Same input with the legacy `debug_mode` gate open. */
 export const RANAP_DEBUG_INPUT = {
   ...RANAP_HAPPY_INPUT,
   debugMode: true,
-};
+} satisfies RanapInput;
 
 const GRAND_TOTAL = 1_000_000;
 

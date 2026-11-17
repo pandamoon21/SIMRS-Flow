@@ -14,222 +14,104 @@ import type {
   StepResult,
   ReasoningItem,
 } from '@simrs-flow/workflow-core';
-import { REASONING_LABEL, reasoningEvidence, reasoningOf } from '@simrs-flow/workflow-core';
+import {
+  REASONING_LABEL,
+  attempt,
+  blocked,
+  fail,
+  ok,
+  reasoningEvidence,
+  reasoningOf,
+  review,
+  rowsField,
+  skipped,
+  softJson,
+  softRead,
+} from '@simrs-flow/workflow-core';
 import type { EvoMedisClient } from '@simrs-flow/evomedis-client';
-import { berkasFactsOf, evaluateBerkas, pageList, type BerkasProgressPort, type BerkasReaderPort } from '@simrs-flow/berkas/evaluate';
+import { BERKAS_PROGRESS_KEY, berkasFactsOf, berkasIndexPayload, evaluateBerkas, pageList, type BerkasProgressPort, type BerkasReaderPort } from '@simrs-flow/berkas/evaluate';
 import { rajalWorkflow } from './workflow.js';
 import { noKkRejectionReason, normalizeCardNumber, normalizeDate } from '@simrs-flow/evomedis-client';
 import {
-  buildRajalTampungBayarPayload,
+  RAJAL_DEFAULT_ACCEPTED_PENJAMIN,
+  RAJAL_DEFAULT_PAYMENT_CONFIG,
+  RAJAL_INSTALASI_OPTIONS,
+  RAJAL_LAB_EMPTY_RESULT_MARKERS,
+  RAJAL_LAB_MIN_LIS_MARKUP_LENGTH,
+  RAJAL_LAB_PA_MIN_RESULT_LENGTH,
+  RAJAL_PENUNJANG_UNIT_KEYWORD,
+  RAJAL_SEP_HISTORY_ATTEMPTS,
+  RAJAL_SEP_SERVICE_TYPE,
+} from './rules.js';
+import {
   buildRajalUnpaidReportQuery,
-  evaluateRajalExitDateResponse,
-  evaluateRajalConsultVisit,
-  evaluateRajalOrderBlocker,
-  evaluateRajalPenunjangBlocker,
+  parseRajalUnpaidReport,
+  selectRajalUnpaidBatch,
+  type RajalUnpaidBatch,
+  type RajalUnpaidReportFilters,
+  type RajalUnpaidReportQuery,
+} from './unpaidReport.js';
+import {
+  evaluateRajalLabPdfGet,
+  evaluateRajalLabPdfHead,
   formatRajalLegacyDate,
   isElektromedikTreatmentName,
   isLabPaTreatmentName,
   isRadiologyTreatmentName,
   isRegularLabTreatmentName,
-  isUnknownPenunjangTreatmentName,
-  parseRajalUnpaidReport,
+  resolveRajalLisPdfTarget,
+  resultCount,
+} from './logic/penunjang.js';
+import {
+  keepSelectedClinicPatients,
+  matchedClinic,
   rajalClinicCandidates,
   resolveRajalClinicMatch,
-  selectRajalUnpaidBatch,
-  sepPoliMatches,
-  verifyRajalTreatmentGroups,
+  resolveRajalSep,
+} from './logic/sepClinic.js';
+import {
+  evaluateRajalBillRules,
+  evaluateRajalConsultVisit,
   rajalTreatmentChecklist,
-  RAJAL_DEFAULT_PAYMENT_CONFIG,
-  RAJAL_INSTALASI_OPTIONS,
-  RAJAL_LAB_EMPTY_RESULT_MARKERS,
-  RAJAL_LAB_MIN_LIS_MARKUP_LENGTH,
-  evaluateRajalLabPdfGet,
-  evaluateRajalLabPdfHead,
-  RAJAL_LAB_PA_MIN_RESULT_LENGTH,
-  RAJAL_PENUNJANG_UNIT_KEYWORD,
-  resolveRajalLisPdfTarget,
-  RAJAL_SEP_HISTORY_ATTEMPTS,
-  RAJAL_SEP_SERVICE_TYPE,
-} from './legacyConfig.js';
+  unclassifiedPenunjangRows,
+} from './logic/treatment.js';
+import {
+  classifyRajalInstalasi,
+  evaluateRajalExitDateResponse,
+  isRajalBillableCandidate,
+  rajalEffectiveRange,
+  recordVisitDate,
+} from './logic/visit.js';
+import {
+  buildRajalTampungBayarPayload,
+  evaluateRajalOrderBlocker,
+  evaluateRajalPenunjangBlocker,
+  tallyRajalBillLines,
+} from './logic/payment.js';
+import { rajalState } from './state.js';
+import { RAJAL_NODE, RAJAL_PATIENT_OUTCOMES_EVIDENCE } from './nodes.js';
 import type {
-  RajalPaymentConfig,
-  RajalTreatmentGroup,
-  RajalUnpaidBatch,
-  RajalUnpaidReportFilters,
-  RajalUnpaidReportQuery,
-} from './legacyConfig.js';
+  RajalDiscoveryInput,
+  RajalHasilResponse,
+  RajalInput,
+  RajalIradOrderRow,
+  RajalPaOrderRow,
+  RajalConsultKind,
+  RajalPaymentState,
+  RajalPenunjangResultRow,
+  RajalRecordRow,
+  RajalSepRow,
+  RajalTindakanRow,
+  RajalTransactionState,
+  RajalTreatmentState,
+} from './types.js';
 
-/**
- * Legacy `doFetch`'s form (source lines 1452-1457) — the auto-fetch request.
- *
- * Present on a {@link RajalInput} instead of `patientIds`: the run discovers
- * its own batch from the unpaid-bill report rather than being handed one.
- * The four filters are legacy's, and they select on three different things:
- *
- *  - `instalasi` is a **server-side** filter (`cmbinstalasi`); it picks which
- *    installation's unpaid bills the report renders at all. See
- *    {@link RAJAL_INSTALASI_OPTIONS}; legacy defaults to `'1'` (Rawat Jalan).
- *  - `from`/`to` are the report period (`txtperiode1`/`txtperiode2`), also
- *    server-side. Legacy's `autosaveCfg` (source line 413) then copies them
- *    onto `dateFrom`/`dateTo`, so the period the batch was discovered over is
- *    also the range `filter_records` matches visits against.
- *  - `penjamin` and `unit` are **client-side** scrapes of the rendered report:
- *    `penjamin` is a case-insensitive substring of the row's guarantor column,
- *    `unit` a comma-separated list of substrings matched against the row's
- *    *section heading* — the `POLI …` bar the report groups rows under.
- *
- * The section headings do double duty: they are also where the run's clinic
- * list comes from ({@link extractRajalClinicFromSection} strips the `POLI `
- * prefix), minus the penunjang/pharmacy groupings
- * {@link shouldExcludeRajalSection} rejects, which are billed through their
- * originating poli and must never become a clinic of their own.
- */
-export interface RajalDiscoveryInput extends RajalUnpaidReportQuery, RajalUnpaidReportFilters {
-  /**
-   * Optional: refuse the run if the report yields more distinct patients than
-   * this. Absent = no limit (production runs whole clinic-days).
-   */
-  maxPatients?: number;
-}
-
-export interface RajalInput {
-  /**
-   * The operator's typed batch. Optional **only** when {@link discovery} is
-   * set, in which case the report supplies it.
-   */
-  patientIds?: string[];
-  /**
-   * Selected poli. Optional in discovery mode: left empty the report's own
-   * section headings become the clinic list, exactly as legacy's auto-clinic
-   * checkbox did. Supplied, it *narrows* the discovered batch — a discovered
-   * patient seen under no selected clinic is dropped, which is legacy
-   * `removePatientIdsForClinic` (source line 373).
-   */
-  clinics?: string[];
-  date: string;
-  /**
-   * Legacy `getEffectiveDateRange` (source line 335): the batch matches a
-   * *range*, not a single day. Both default to `date`, or — on a discovery
-   * run — to the discovery period (legacy `autosaveCfg`, source line 413).
-   */
-  dateFrom?: string;
-  dateTo?: string;
-  acceptedPenjaminKeywords?: string[];
-  tindakanIncludeKeywords?: string[];
-  tindakanExcludeKeywords?: string[];
-  tindakanMinCount?: number;
-  /** Legacy `treatmentGroups` — same letter is OR, different letters are AND. */
-  treatmentGroups?: RajalTreatmentGroup[];
-  /** Legacy `skipTreatments` — presence anywhere on the bill rejects it. */
-  skipTreatments?: string[];
-  /** Legacy `sepCheckRequired`; `false` skips SEP validation (and its correction plan) for this run. */
-  sepCheckRequired?: boolean;
-  /** Legacy `paymentConfig` — shift, tender type and payer for tampung bayar. */
-  paymentConfig?: Partial<RajalPaymentConfig>;
-  /** `false`: never plan `simpan verifikasi`; an unverified visit is dropped instead of paid. */
-  enableVerifikasi?: boolean;
-  /** `false`: plan no tampung bayar; every check still runs and is reported. */
-  enableTampungBayar?: boolean;
-  /**
-   * Legacy `doFetch` (source line 1451). Set to discover the batch from the
-   * unpaid-bill report instead of supplying {@link patientIds}.
-   */
-  discovery?: RajalDiscoveryInput;
-}
-
-export interface RajalRecordRow {
-  no_transaksi: string;
-  no_registrasikunjungan: string;
-  kd_unit: string;
-  nama_unit?: string;
-  status_bayar?: string;
-  nama_penjamin?: string;
-  tgl_masuk?: string;
-  /**
-   * Attached locally by `rajal.loadHistory` — the visit history endpoint is
-   * queried per medrec and does not echo it, but the penunjang and SEP guards
-   * need the patient id to look up orders and BPJS card numbers.
-   */
-  patientId?: string;
-  /**
-   * Attached locally by `rajal.filterRecords`: the single selected clinic this
-   * unit resolved to. Legacy recomputed it per step via `getMatchedClinic`;
-   * resolving it once means the SEP guard cannot disagree with the filter.
-   */
-  matchedClinic?: string;
-}
-
-interface RajalTransactionState {
-  readonly record: RajalRecordRow;
-  readonly tx: { readonly jenis_sep?: string; readonly no_sep?: string };
-}
-
-interface RajalTindakanRow {
-  readonly nama_tindakan?: string;
-  /** Line total (`jumlah`) — summed for the payable amount. */
-  readonly jumlah?: string;
-  /** `"Belum"`/`"Sudah"` per line — the payment-state signal. */
-  readonly flag?: string;
-  /** Line order on the bill (backend-assigned). */
-  readonly urut_tindakan?: string;
-  readonly status_kirim?: string | null;
-}
-
-interface RajalTreatmentState {
-  readonly record: RajalRecordRow;
-  /** Rows that survived the operator's include filters. */
-  readonly rows: readonly RajalTindakanRow[];
-  /** Every billed row — the penunjang guards classify the unfiltered bill. */
-  readonly allRows: readonly RajalTindakanRow[];
-}
-
-interface RajalPaymentState {
-  readonly record: RajalRecordRow;
-  readonly pay: { readonly total?: string; readonly sudah?: string };
-}
-
-/** Radiology order row from `poliklinik.getHistoryIrad`. */
-interface RajalIradOrderRow {
-  readonly tgl_order?: string;
-  readonly status_approve?: string;
-  readonly tgl_terlayani?: string;
-}
-
-/** Result-transaction row from a penunjang `hasil pemeriksaan` search. */
-interface RajalPenunjangResultRow {
-  readonly no_transaksi?: string;
-  readonly tgl_transaksi?: string;
-}
-
-/** PA order row from `kemoterapi.getHistoryOrderPa`. */
-interface RajalPaOrderRow extends RajalPenunjangResultRow {
-  readonly kd_jenis_pemeriksaan?: string;
-}
-
-/** Shape shared by every `gethasilpemeriksaan`-style response. */
-interface RajalHasilResponse {
-  readonly total?: unknown;
-  readonly rows?: readonly { readonly deskripsi?: string }[];
-}
-
-/** SEP history row from `pendaftaran.getRiwayatSep`. */
-interface RajalSepRow {
-  readonly tgl_sep?: string;
-  readonly jns_pelayanan?: string;
-  readonly poli_tujuan?: string;
-  readonly no_sep?: string;
-}
+export type { RajalDiscoveryInput, RajalInput, RajalRecordRow } from './types.js';
 
 export interface RajalDeps {
   client: EvoMedisClient;
   /** Opt-in "Kelengkapan Berkas" reader (Node host only); absent → the step skips. */
   berkas?: BerkasReaderPort;
-}
-
-const ACCEPTED_DEFAULT = ['BPJS PBI', 'BPJS NON PBI'];
-
-function get<T>(ctx: ExecutorContext, key: string): T | undefined {
-  return ctx.scratch[key] as T | undefined;
 }
 
 /** Reformat a 6-digit medrec to the 0-XX-XX-XX form used by the backend. */
@@ -245,96 +127,22 @@ function normalizeKeywords(keywords?: string[]): string[] {
   return (keywords ?? []).map((k) => k.trim().toUpperCase()).filter(Boolean);
 }
 
-function tindakanName(row: RajalTindakanRow): string {
-  return (row.nama_tindakan ?? '').toUpperCase();
-}
-
 /** Legacy `getTreatmentNameLower` — the penunjang classifiers are lower-case. */
 function tindakanNameLower(row: RajalTindakanRow): string {
   return (row.nama_tindakan ?? '').trim().toLowerCase();
 }
 
-/** The visit's own date, falling back to the requested batch date. */
-function recordVisitDate(record: RajalRecordRow, fallback: string): string {
-  return (record.tgl_masuk ? normalizeDate(record.tgl_masuk) : null) ?? fallback;
-}
-
-/**
- * Legacy `getEffectiveDateRange` (source line 335), plus legacy `autosaveCfg`
- * (source line 413): on a discovery run the fetch period *is* the run's range
- * (`c.dateFrom=fetchFrom||c.targetDate`). Matching visits against a different
- * window than the one the batch was discovered over would either drop rows the
- * report listed or admit rows it did not.
- */
-function effectiveRange(cfg: RajalInput): { from: string; to: string } {
-  return {
-    from: cfg.dateFrom || cfg.discovery?.from || cfg.date,
-    to: cfg.dateTo || cfg.discovery?.to || cfg.date,
-  };
-}
-
-/**
- * Row count of a `hasil pemeriksaan` response. Legacy treated `total === 0` as
- * "no result" but let an absent `total` through; we fail closed instead and
- * fall back to the row count, so a shapeless response never reads as resulted.
- */
-function resultCount(res: RajalHasilResponse | null | undefined): number {
-  if (!res) return 0;
-  if (typeof res.total === 'number') return res.total;
-  if (typeof res.total === 'string') {
-    const parsed = Number.parseInt(res.total, 10);
-    return Number.isNaN(parsed) ? 0 : parsed;
-  }
-  return res.rows?.length ?? 0;
-}
-
-/**
- * Legacy `getMatchedClinic` (source line 747). `filterRecords` already resolved
- * and stamped the clinic with the scored matcher, so this only re-resolves for
- * rows that never went through the filter (the SEP sibling scan looks at every
- * same-day visit, including ones the filter dropped). An ambiguous or unmatched
- * unit yields `''`, exactly as legacy did.
- */
-function matchedClinic(record: RajalRecordRow, clinics: readonly string[]): string {
-  if (record.matchedClinic) return record.matchedClinic;
-  const match = resolveRajalClinicMatch(record.nama_unit ?? '', clinics);
-  return match.ambiguous ? '' : match.matchedClinic;
-}
-
-/**
- * Legacy `removePatientIdsForClinic` (source line 373): keep discovered ids
- * seen under a selected poli. Matching goes through `resolveRajalClinicMatch`
- * because chips are aliases (`DALAM`) and sections long forms; an id the map
- * never claimed is kept, as legacy's `beforeManaged` guard does.
- */
-function keepSelectedClinicPatients(
-  ids: readonly string[],
-  clinicsByPatientId: Record<string, string[]>,
-  requested: readonly string[],
-): string[] {
-  const selected = requested.filter((clinic) => rajalClinicCandidates(clinic).length > 0);
-  if (requested.length === 0) return [...ids];
-  return ids.filter((id) => {
-    const seen = clinicsByPatientId[id];
-    if (!seen || seen.length === 0) return true;
-    return seen.some((section) => selected.some((clinic) => resolveRajalClinicMatch(section, [clinic]).matchedClinic !== ''));
-  });
-}
-
 function pruneRajalRecords(ctx: ExecutorContext, dropped: ReadonlySet<string>): void {
   if (dropped.size === 0) return;
-  const droppedAt = (ctx.scratch.droppedAt ??= {}) as Record<string, string>;
-  const step = get<string>(ctx, 'currentStep') ?? '';
+  const state = rajalState(ctx);
+  const droppedAt = (state.droppedAt ??= {});
+  const step = state.currentStep ?? '';
   for (const trx of dropped) droppedAt[trx] ??= step;
   const keep = (record: RajalRecordRow) => !dropped.has(record.no_transaksi);
-  const matching = get<RajalRecordRow[]>(ctx, 'matching');
-  if (matching) ctx.scratch.matching = matching.filter(keep);
-  const transactions = get<RajalTransactionState[]>(ctx, 'transactions');
-  if (transactions) ctx.scratch.transactions = transactions.filter(({ record }) => keep(record));
-  const treatments = get<RajalTreatmentState[]>(ctx, 'treatments');
-  if (treatments) ctx.scratch.treatments = treatments.filter(({ record }) => keep(record));
-  const payable = get<RajalPaymentState[]>(ctx, 'payable');
-  if (payable) ctx.scratch.payable = payable.filter(({ record }) => keep(record));
+  if (state.matching) state.matching = state.matching.filter(keep);
+  if (state.transactions) state.transactions = state.transactions.filter(({ record }) => keep(record));
+  if (state.treatments) state.treatments = state.treatments.filter(({ record }) => keep(record));
+  if (state.payable) state.payable = state.payable.filter(({ record }) => keep(record));
 }
 
 /** `rajal.validateExitDate` → `validate_exit_date` (workflow.ts builds the ref the other way). */
@@ -347,7 +155,7 @@ const stepLabel = (nodeId: string) => STEP_LABELS.get(nodeId) ?? nodeId;
 
 /** Why a patient never reached the batch (unreadable history, untransferred penunjang, ambiguous poli). */
 function patientNote(ctx: ExecutorContext, patientId: string, note: string): void {
-  const notes = (ctx.scratch.patientNotes ??= {}) as Record<string, string>;
+  const notes = (rajalState(ctx).patientNotes ??= {});
   notes[patientId] ??= note;
 }
 
@@ -367,11 +175,12 @@ export interface RajalPatientOutcome {
  * (batchRecords, droppedAt, patientNotes); it decides nothing itself.
  */
 function patientOutcomes(ctx: ExecutorContext): RajalPatientOutcome[] {
-  const ids = get<string[]>(ctx, 'ids') ?? [];
-  const started = get<Array<{ patientId: string; trx: string; clinic: string }>>(ctx, 'batchRecords') ?? [];
-  const remaining = new Set((get<RajalRecordRow[]>(ctx, 'matching') ?? []).map((r) => r.no_transaksi));
-  const droppedAt = get<Record<string, string>>(ctx, 'droppedAt') ?? {};
-  const notes = get<Record<string, string>>(ctx, 'patientNotes') ?? {};
+  const state = rajalState(ctx);
+  const ids = state.ids ?? [];
+  const started = state.batchRecords ?? [];
+  const remaining = new Set((state.matching ?? []).map((r) => r.no_transaksi));
+  const droppedAt = state.droppedAt ?? {};
+  const notes = state.patientNotes ?? {};
   return ids.map((patientId) => {
     const records = started.filter((r) => r.patientId === patientId);
     const kept = records.filter((r) => remaining.has(r.trx));
@@ -409,9 +218,9 @@ function penunjangValidator(
   check: (args: PenunjangCheckArgs) => Promise<StepResult | null>,
 ): NodeExecutor {
   return async (ctx) => {
-    const cfg = get<RajalInput>(ctx, 'config');
-    const states = get<RajalTreatmentState[]>(ctx, 'treatments') ?? [];
-    if (!cfg || states.length === 0) return { status: 'skipped', summary: 'Tidak ada kunjungan' };
+    const cfg = rajalState(ctx).config;
+    const states = rajalState(ctx).treatments ?? [];
+    if (!cfg || states.length === 0) return skipped('Tidak ada kunjungan');
     let billed = 0;
     const kept: RajalTreatmentState[] = [];
     const hard: string[] = [];
@@ -449,7 +258,7 @@ function penunjangValidator(
       kept.push(state);
     }
     if (dropped.size > 0) {
-      ctx.scratch.treatments = kept;
+      rajalState(ctx).treatments = kept;
       pruneRajalRecords(ctx, dropped);
       const issues = [...hard, ...review];
       if (hard.length > 0 && kept.length === 0) {
@@ -483,19 +292,16 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
       const discovery = input?.discovery;
       if (discovery) {
         if (!discovery.from?.trim() || !discovery.to?.trim()) {
-          return { status: 'failed', summary: 'Cari otomatis butuh periode (dari dan sampai)' };
+          return fail('Cari otomatis butuh periode (dari dan sampai)');
         }
         if (discovery.from > discovery.to) {
-          return {
-            status: 'failed',
-            summary: `Periode cari otomatis terbalik: ${discovery.from} → ${discovery.to}`,
-          };
+          return fail(`Periode cari otomatis terbalik: ${discovery.from} → ${discovery.to}`);
         }
       } else {
-        if (!input?.patientIds?.length) return { status: 'failed', summary: 'Belum ada No. RM' };
-        if (!input.clinics?.length) return { status: 'failed', summary: 'Belum ada poli dipilih' };
+        if (!input?.patientIds?.length) return fail('Belum ada No. RM');
+        if (!input.clinics?.length) return fail('Belum ada poli dipilih');
       }
-      ctx.scratch.config = { ...input, acceptedPenjaminKeywords: input.acceptedPenjaminKeywords ?? ACCEPTED_DEFAULT };
+      rajalState(ctx).config = { ...input, acceptedPenjaminKeywords: input.acceptedPenjaminKeywords ?? [...RAJAL_DEFAULT_ACCEPTED_PENJAMIN] };
       if (discovery) {
         const instalasi = discovery.instalasi ?? '1';
         const label = RAJAL_INSTALASI_OPTIONS.find((option) => option.code === instalasi)?.label ?? instalasi;
@@ -519,32 +325,32 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
      * listed nothing is a legitimate empty batch and `skip`s.
      */
     'rajal.normalizeIds': async (ctx) => {
-      const cfg = get<RajalInput>(ctx, 'config')!;
+      const state = rajalState(ctx);
+      const cfg = state.config!;
       const discovery = cfg.discovery;
       if (!discovery) {
         const ids = [...new Set((cfg.patientIds ?? []).map(formatPatientId).filter(Boolean))];
-        ctx.scratch.ids = ids;
+        state.ids = ids;
         ctx.log(`${ids.length} No RM unik dinormalisasi`);
         return ok(`${ids.length} No. RM unik`);
       }
 
       const period = `${discovery.from} → ${discovery.to}`;
       ctx.log(`Discovering unpaid batch over ${period} from laporan_belum_bayar`);
-      let batch: RajalUnpaidBatch;
-      try {
-        batch = await fetchRajalUnpaidBatch(client, discovery, { signal: ctx.signal });
-      } catch (err) {
+      const read = await attempt(() => fetchRajalUnpaidBatch(client, discovery, { signal: ctx.signal }));
+      if (!read.ok) {
         return blocked(
-          `Gagal membaca laporan cari otomatis untuk ${period}: ${err instanceof Error ? err.message : String(err)} — tidak ada antrean ditemukan; laporan yang gagal dibaca bukan laporan kosong`,
+          `Gagal membaca laporan cari otomatis untuk ${period}: ${read.message} — tidak ada antrean ditemukan; laporan yang gagal dibaca bukan laporan kosong`,
         );
       }
+      const batch = read.value;
       if (!batch.readable) {
         return blocked(
           `Gagal membaca laporan cari otomatis untuk ${period}: laporan_belum_bayar dijawab tanpa tabel laporan — laporan yang gagal dibaca bukan laporan kosong`,
         );
       }
 
-      ctx.scratch.discovery = batch;
+      state.discovery = batch;
       // Legacy `mergeAutoClinicPatients` (source line 361), keyed on the same
       // normalised medrec the rest of the pipeline uses so `resolve_clinics`
       // can match a discovered patient against the selected clinics.
@@ -558,12 +364,12 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
           if (label && !bucket.includes(label)) bucket.push(label);
         }
       }
-      ctx.scratch.clinicsByPatientId = clinicsByPatientId;
+      state.clinicsByPatientId = clinicsByPatientId;
 
       // Legacy keeps duplicates in the textarea and counts `uniqueRM`
       // separately (source line 1476); the port only ever runs the unique set.
       const ids = [...new Set(batch.patientIds.map(formatPatientId).filter(Boolean))];
-      ctx.scratch.ids = ids;
+      state.ids = ids;
       // The cap bounds what this run will process, i.e. the ids left after the
       // poli chips narrow them (`resolve_clinics` performs that prune). Live
       // 2026-10-15: a SYARAF run blocked on "607 patient(s)", which was the whole
@@ -577,10 +383,9 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
         ctx.log(`Penunjang/pharmacy section(s) excluded: ${batch.excludedSections.join(', ')}`, 'warn');
       }
       if (ids.length === 0) {
-        return {
-          status: 'skipped',
-          summary: `Tidak ada yang ditagih: ${period} berisi ${batch.stats.total} baris belum bayar, tidak ada yang cocok dengan ${describeFilters(discovery)}`,
-        };
+        return skipped(
+          `Tidak ada yang ditagih: ${period} berisi ${batch.stats.total} baris belum bayar, tidak ada yang cocok dengan ${describeFilters(discovery)}`,
+        );
       }
 
       const cap = discovery.maxPatients;
@@ -601,19 +406,20 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
     },
 
     'rajal.resolveClinics': (ctx) => {
-      const cfg = get<RajalInput>(ctx, 'config')!;
-      const batch = get<RajalUnpaidBatch>(ctx, 'discovery');
+      const state = rajalState(ctx);
+      const cfg = state.config!;
+      const batch = state.discovery;
       const requested = (cfg.clinics ?? []).map((c) => c.trim().toUpperCase()).filter(Boolean);
       // Legacy's auto-clinic checkbox (source line 1491) replaces the chips
       // with the report's own section headings. Requested clinics win because
       // they narrow — see the prune below.
       const clinics =
         requested.length > 0 ? requested : (batch?.clinics ?? []).map((c) => c.trim().toUpperCase()).filter(Boolean);
-      ctx.scratch.clinics = clinics;
+      state.clinics = clinics;
       if (clinics.length === 0) {
-        if (!batch) return { status: 'failed', summary: 'Tidak ada poli yang bisa ditentukan' };
-        if ((get<string[]>(ctx, 'ids') ?? []).length === 0) {
-          return { status: 'skipped', summary: 'Antrean hasil cari otomatis kosong — tidak ada poli untuk ditentukan' };
+        if (!batch) return fail('Tidak ada poli yang bisa ditentukan');
+        if ((state.ids ?? []).length === 0) {
+          return skipped('Antrean hasil cari otomatis kosong — tidak ada poli untuk ditentukan');
         }
         return blocked(
           'Laporan tidak memuat seksi poli yang bisa ditagih — semua judulnya kelompok penunjang/farmasi',
@@ -633,48 +439,48 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
       // what legacy's resolver does.
       const droppedNote = 'Pasien dari laporan yang tidak ada di poli terpilih dibuang';
       if (batch && requested.length > 0) {
-        const ids = get<string[]>(ctx, 'ids') ?? [];
-        const kept = keepSelectedClinicPatients(ids, get<Record<string, string[]>>(ctx, 'clinicsByPatientId') ?? {}, clinics);
+        const ids = state.ids ?? [];
+        const kept = keepSelectedClinicPatients(ids, state.clinicsByPatientId ?? {}, clinics);
         const dropped = ids.length - kept.length;
         if (dropped > 0) {
           ctx.log(`${droppedNote}: ${dropped}`, 'warn');
-          ctx.scratch.ids = kept;
+          state.ids = kept;
         }
       }
-      return { ...ok(`Poli diproses: ${clinics.join(', ')}`), evidence: [{ label: 'rajal.selected-clinics', source: 'resolve_clinics', data: clinics }] };
+      return { ...ok(`Poli diproses: ${clinics.join(', ')}`), evidence: [{ label: 'rajal.selected-clinics', source: RAJAL_NODE.resolveClinics, data: clinics }] };
     },
 
     'rajal.startBatch': (ctx) => {
-      const ids = get<string[]>(ctx, 'ids') ?? [];
-      ctx.scratch.batchTotal = ids.length;
+      const ids = rajalState(ctx).ids ?? [];
+      rajalState(ctx).batchTotal = ids.length;
       return ok(`Antrean ${ids.length} pasien dimulai`, {
         evidence: [
           { label: 'patients', data: ids },
-          { label: 'rajal.batch-count', source: 'start_batch', data: { totalPatients: ids.length } },
+          { label: 'rajal.batch-count', source: RAJAL_NODE.startBatch, data: { totalPatients: ids.length } },
         ],
       });
     },
 
     'rajal.loadHistory': async (ctx) => {
-      const ids = get<string[]>(ctx, 'ids') ?? [];
-      ctx.scratch.historyUnreadableCount = 0;
-      if (ids.length === 0) return { status: 'skipped', summary: 'Tidak ada pasien dalam antrean' };
+      const state = rajalState(ctx);
+      const ids = state.ids ?? [];
+      state.historyUnreadableCount = 0;
+      if (ids.length === 0) return skipped('Tidak ada pasien dalam antrean');
       const rows: RajalRecordRow[] = [];
       const unreadable: string[] = [];
       for (const patientId of ids) {
-        let res: { rows?: RajalRecordRow[] };
-        try {
-          res = await client.postJson<{ rows?: RajalRecordRow[] }>(
-            'kasir.getHistoryKunjungan',
-            { nomedrec: patientId, page: '1', rows: '10' },
-            { signal: ctx.signal },
-          );
-        } catch (err) {
+        const read = await attempt(() => client.postJson<{ rows?: RajalRecordRow[] }>(
+          'kasir.getHistoryKunjungan',
+          { nomedrec: patientId, page: '1', rows: '10' },
+          { signal: ctx.signal },
+        ));
+        if (!read.ok) {
           // Parity item 13: an unreadable read is "not read", never a crash.
-          ctx.log(`Riwayat kunjungan ${patientId} tidak terbaca: ${err instanceof Error ? err.message : String(err)}`, 'warn');
+          ctx.log(`Riwayat kunjungan ${patientId} tidak terbaca: ${read.message}`, 'warn');
           unreadable.push(patientId);
           continue;
         }
+        const res = read.value;
         // Legacy source line 1044 warns and abandons the patient when the reply
         // carries no `rows` array. A patient whose history we could not read is
         // not a patient with no visits — report it instead of billing on it.
@@ -686,35 +492,23 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
         // orders up per patient and the response does not echo it.
         rows.push(...res.rows.map((row) => ({ ...row, patientId })));
       }
-      ctx.scratch.history = rows;
-      ctx.scratch.historyUnreadableCount = unreadable.length;
+      state.history = rows;
+      state.historyUnreadableCount = unreadable.length;
       for (const id of unreadable) patientNote(ctx, id, 'riwayat kunjungan tidak terbaca');
       if (unreadable.length > 0) {
-        return {
-          status: 'needs_review',
-          summary: `Riwayat kunjungan gagal dibaca untuk ${unreadable.length}/${ids.length} pasien: ${unreadable.join(', ')}`,
-        };
+        return review(`Riwayat kunjungan gagal dibaca untuk ${unreadable.length}/${ids.length} pasien: ${unreadable.join(', ')}`);
       }
       return ok(`${rows.length} baris kunjungan dibaca untuk ${ids.length} pasien`);
     },
 
     'rajal.filterRecords': (ctx) => {
-      const cfg = get<RajalInput>(ctx, 'config')!;
-      const clinics = get<string[]>(ctx, 'clinics') ?? [];
-      const rows = get<RajalRecordRow[]>(ctx, 'history') ?? [];
-      const { from, to } = effectiveRange(cfg);
-      const candidate = (r: RajalRecordRow) => {
-        const unpaid = (r.status_bayar ?? '').toUpperCase().replace(/\s/g, '') === 'BELUM';
-        const penjaminOk = (cfg.acceptedPenjaminKeywords ?? ACCEPTED_DEFAULT).some((k) =>
-          (r.nama_penjamin ?? '').toUpperCase().includes(k.toUpperCase()),
-        );
-        // Legacy compares `tgl_masuk.slice(0,10)` against the range as strings
-        // (source line 738), so a row with no admission date never matches. The
-        // previous port let an undated row through, which is fail-open.
-        const visitDate = r.tgl_masuk ? normalizeDate(r.tgl_masuk) : null;
-        const dateOk = visitDate !== null && visitDate >= from && visitDate <= to;
-        return unpaid && penjaminOk && dateOk;
-      };
+      const state = rajalState(ctx);
+      const cfg = state.config!;
+      const clinics = state.clinics ?? [];
+      const rows = state.history ?? [];
+      const range = rajalEffectiveRange(cfg);
+      const accepted = cfg.acceptedPenjaminKeywords ?? RAJAL_DEFAULT_ACCEPTED_PENJAMIN;
+      const candidate = (r: RajalRecordRow) => isRajalBillableCandidate(r, range, accepted);
       // Legacy `isMatchingRecordPenunjang` (source line 1045): an unpaid
       // penunjang visit in range means its charges were never transferred onto
       // the clinic bill, so the patient must not be paid yet. Legacy matched
@@ -744,8 +538,8 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
         if (!match.matchedClinic) continue;
         matching.push({ ...r, matchedClinic: match.matchedClinic });
       }
-      ctx.scratch.matching = matching;
-      ctx.scratch.batchRecords = matching.map((r) => ({ patientId: r.patientId ?? '', trx: r.no_transaksi, clinic: r.matchedClinic ?? '' }));
+      state.matching = matching;
+      state.batchRecords = matching.map((r) => ({ patientId: r.patientId ?? '', trx: r.no_transaksi, clinic: r.matchedClinic ?? '' }));
       for (const id of blockedPatients) patientNote(ctx, id, 'kunjungan penunjang belum ditransfer & belum dibayar');
       for (const r of rows) {
         if (r.patientId && candidate(r) && !blockedPatients.has(r.patientId) && resolveRajalClinicMatch(r.nama_unit ?? '', clinics).ambiguous) {
@@ -776,10 +570,10 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
       }
       const clinicCountEvidence = {
         label: 'rajal.clinic-counts',
-        source: 'filter_records',
+        source: RAJAL_NODE.filterRecords,
         data: {
           basis: 'matched-visits',
-          complete: (get<number>(ctx, 'historyUnreadableCount') ?? 0) === 0 && !hasUnidentifiedMatch,
+          complete: (state.historyUnreadableCount ?? 0) === 0 && !hasUnidentifiedMatch,
           totalClinics: clinicPatientIds.size,
           totalPatients: allPatientIds.size,
           clinics: [...clinicPatientIds].map(([clinic, patients]) => ({ clinic, patientCount: patients.size })),
@@ -790,18 +584,15 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
       if (matching.length === 0) {
         if (penunjang.length > 0) result = blocked(`Kunjungan penunjang belum ditransfer dan belum dibayar: ${penunjang.join(', ')}`);
         else if (ambiguous.length > 0) {
-          result = {
-            status: 'needs_review',
-            summary: `Tidak ada kunjungan yang jelas: ${ambiguous.length} kunjungan cocok dengan dua poli terpilih — ${ambiguous.join('; ')}`,
-          };
-        } else result = { status: 'skipped', summary: 'Tidak ada kunjungan yang cocok' };
+          result = review(`Tidak ada kunjungan yang jelas: ${ambiguous.length} kunjungan cocok dengan dua poli terpilih — ${ambiguous.join('; ')}`);
+        } else result = skipped('Tidak ada kunjungan yang cocok');
       } else {
-        const skipped = [
+        const passedOver = [
           ...(penunjang.length ? [`${penunjang.length} skipped for untransferred penunjang visit(s): ${penunjang.join(', ')}`] : []),
           ...(ambiguous.length ? [`${ambiguous.length} dilewati karena ambigu: ${ambiguous.join('; ')}`] : []),
         ];
-        result = skipped.length > 0
-          ? { status: 'needs_review', summary: `${matching.length} kunjungan cocok; ${skipped.join('; ')}` }
+        result = passedOver.length > 0
+          ? review(`${matching.length} kunjungan cocok; ${passedOver.join('; ')}`)
           : ok(`${matching.length} kunjungan cocok`);
       }
       return { ...result, evidence: [...(result.evidence ?? []), clinicCountEvidence] };
@@ -817,12 +608,9 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
      * ponytail: re-wire `evaluateRajalOncologyPlan` if SIMRS restores the endpoint.
      */
     'rajal.checkRencanaOnko': async (ctx) => {
-      const matching = get<RajalRecordRow[]>(ctx, 'matching') ?? [];
-      if (matching.length === 0) return { status: 'skipped', summary: 'Tidak ada kunjungan' };
-      return {
-        status: 'skipped',
-        summary: 'Tidak dicek — SIMRS tidak lagi menyediakan rencana onkologi; pastikan pasien kemoterapi secara manual',
-      };
+      const matching = rajalState(ctx).matching ?? [];
+      if (matching.length === 0) return skipped('Tidak ada kunjungan');
+      return skipped('Tidak dicek — SIMRS tidak lagi menyediakan rencana onkologi; pastikan pasien kemoterapi secara manual');
     },
 
     /**
@@ -837,8 +625,8 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
      * a record at all is unreadable, and that never passes.
      */
     'rajal.validateExitDate': async (ctx) => {
-      const matching = get<RajalRecordRow[]>(ctx, 'matching') ?? [];
-      if (matching.length === 0) return { status: 'skipped', summary: 'Tidak ada kunjungan' };
+      const matching = rajalState(ctx).matching ?? [];
+      if (matching.length === 0) return skipped('Tidak ada kunjungan');
       const kept: RajalRecordRow[] = [];
       const missing: string[] = [];
       const unreadable: string[] = [];
@@ -863,7 +651,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
         } else kept.push(rec);
       }
       if (dropped.size > 0) {
-        ctx.scratch.matching = kept;
+        rajalState(ctx).matching = kept;
         pruneRajalRecords(ctx, dropped);
         if (missing.length > 0 && kept.length === 0) {
           return blocked(
@@ -876,19 +664,16 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
             ? [`Tanggal keluar tidak terbaca pada ${unreadable.length}/${matching.length} kunjungan: ${unreadable.join(', ')}`]
             : []),
         ];
-        return {
-          status: 'needs_review',
-          summary: kept.length === 0
-            ? `${issues.join('; ')} — getdatacarakeluar_tab did not answer with a discharge record`
-            : `${kept.length} record(s) remain after exit-date check; ${issues.join('; ')}`,
-        };
+        return review(kept.length === 0
+          ? `${issues.join('; ')} — getdatacarakeluar_tab did not answer with a discharge record`
+          : `${kept.length} record(s) remain after exit-date check; ${issues.join('; ')}`);
       }
       return ok(`${matching.length} kunjungan sudah punya tanggal keluar`);
     },
 
     'rajal.validateTransaction': async (ctx) => {
-      const matching = get<RajalRecordRow[]>(ctx, 'matching') ?? [];
-      if (matching.length === 0) return { status: 'skipped', summary: 'Tidak ada kunjungan' };
+      const matching = rajalState(ctx).matching ?? [];
+      if (matching.length === 0) return skipped('Tidak ada kunjungan');
       const transactions: RajalTransactionState[] = [];
       const inpatient: string[] = [];
       const notRajal: string[] = [];
@@ -902,34 +687,30 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
         // the same visit reliably and carries `kd_instalasi` — '1' Rawat Jalan,
         // '2' Rawat Inap, '3' IGD, '14' Penunjang — which is the robust
         // discriminator for exactly the same rejection.
-        let tab: { kd_instalasi?: string };
-        try {
-          tab = await client.postJson<{ kd_instalasi?: string }>(
-            'kasir.getDataKunjunganTab',
-            {
-              no_registrasikunjungan: rec.no_registrasikunjungan,
-              kd_unit: rec.kd_unit,
-              no_transaksi: rec.no_transaksi,
-            },
-            { signal: ctx.signal },
-          );
-        } catch (err) {
+        const tab = await attempt(() => client.postJson<{ kd_instalasi?: string }>(
+          'kasir.getDataKunjunganTab',
+          {
+            no_registrasikunjungan: rec.no_registrasikunjungan,
+            kd_unit: rec.kd_unit,
+            no_transaksi: rec.no_transaksi,
+          },
+          { signal: ctx.signal },
+        ));
+        if (!tab.ok) {
           // Parity item 13: an unreadable read is "not read", never a crash.
-          ctx.log(
-            `Data kunjungan tidak terbaca pada ${rec.no_transaksi}: ${err instanceof Error ? err.message : String(err)}`,
-            'warn',
-          );
+          ctx.log(`Data kunjungan tidak terbaca pada ${rec.no_transaksi}: ${tab.message}`, 'warn');
           unreadable.push(rec.no_transaksi);
           dropped.add(rec.no_transaksi);
           continue;
         }
-        const instalasi = (tab.kd_instalasi ?? '').trim();
-        if (instalasi === '2') {
+        const instalasi = (tab.value.kd_instalasi ?? '').trim();
+        const kind = classifyRajalInstalasi(instalasi);
+        if (kind === 'inpatient') {
           inpatient.push(rec.no_transaksi);
           dropped.add(rec.no_transaksi);
           continue;
         }
-        if (instalasi !== '1') {
+        if (kind !== 'rajal') {
           // Not a rawat jalan transaction (IGD / penunjang / unknown) — the kasir
           // outpatient cashier does not own it, so it must not be billed here.
           notRajal.push(`${rec.no_transaksi} (instalasi ${instalasi || '?'})`);
@@ -940,25 +721,21 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
         // type sometimes carries the current SEP. Empty is fine — `validate_sep`
         // resolves the authoritative SEP from BPJS history and only plans a
         // correction when this differs.
-        let noSep = '';
-        try {
-          const tx = await client.postJson<{ no_sep?: string }>(
-            'kasir.getDataTransaksi',
-            {
-              txtmedrec: (rec.patientId ?? '').trim(),
-              no_transaksi: rec.no_transaksi,
-              kd_unit: rec.kd_unit,
-              no_registrasikunjungan: rec.no_registrasikunjungan,
-            },
-            { signal: ctx.signal },
-          );
-          noSep = (tx.no_sep ?? '').trim();
-        } catch {
-          // Empty/unreadable — treated as "no SEP on file", never fatal.
-        }
+        const tx = await attempt(() => client.postJson<{ no_sep?: string }>(
+          'kasir.getDataTransaksi',
+          {
+            txtmedrec: (rec.patientId ?? '').trim(),
+            no_transaksi: rec.no_transaksi,
+            kd_unit: rec.kd_unit,
+            no_registrasikunjungan: rec.no_registrasikunjungan,
+          },
+          { signal: ctx.signal },
+        ));
+        // Empty/unreadable — treated as "no SEP on file", never fatal.
+        const noSep = tx.ok ? (tx.value.no_sep ?? '').trim() : '';
         transactions.push({ record: rec, tx: { no_sep: noSep } });
       }
-      ctx.scratch.transactions = transactions;
+      rajalState(ctx).transactions = transactions;
       const issues = [
         ...(inpatient.length ? [`${inpatient.length} Rawat Inap: ${inpatient.join(', ')}`] : []),
         ...(notRajal.length ? [`${notRajal.length} bukan Rawat Jalan: ${notRajal.join(', ')}`] : []),
@@ -974,28 +751,23 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
           if (inpatient.length > 0 && notRajal.length === 0 && unreadable.length === 0) {
             return blocked(`Transaksi ${inpatient.join(', ')} adalah Rawat Inap, bukan Rawat Jalan`);
           }
-          return {
-            status: 'needs_review',
-            summary: `Tidak ada transaksi Rawat Jalan yang bisa ditagih — ${issues.join('; ')}`,
-          };
+          return review(`Tidak ada transaksi Rawat Jalan yang bisa ditagih — ${issues.join('; ')}`);
         }
-        return {
-          status: 'needs_review',
-          summary: `${transactions.length} transaksi Rawat Jalan; ${issues.join('; ')}`,
-        };
+        return review(`${transactions.length} transaksi Rawat Jalan; ${issues.join('; ')}`);
       }
       ctx.log(`Cek jenis transaksi: ${transactions.length} transaksi Rawat Jalan`, 'info');
       return ok(`${transactions.length} transaksi Rawat Jalan`);
     },
 
     'rajal.validateTreatment': async (ctx) => {
-      const cfg = get<RajalInput>(ctx, 'config')!;
-      const matching = get<RajalRecordRow[]>(ctx, 'matching') ?? [];
-      if (matching.length === 0) return { status: 'skipped', summary: 'Tidak ada kunjungan' };
+      const state = rajalState(ctx);
+      const cfg = state.config!;
+      const matching = state.matching ?? [];
+      if (matching.length === 0) return skipped('Tidak ada kunjungan');
       const include = normalizeKeywords(cfg.tindakanIncludeKeywords);
       const exclude = normalizeKeywords(cfg.tindakanExcludeKeywords);
-      const history = get<RajalRecordRow[]>(ctx, 'history') ?? [];
-      const consultByTrx: Record<string, 'consult' | 'single_clinic' | 'unknown'> = {};
+      const history = state.history ?? [];
+      const consultByTrx: Record<string, RajalConsultKind> = {};
       const treatmentStates: RajalTreatmentState[] = [];
       const hard: string[] = [];
       const review: string[] = [];
@@ -1024,32 +796,29 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
         ctx.log(consult === 'consult'
           ? `Konsul terdeteksi: ${rec.no_transaksi} (${rec.nama_unit} → ${otherUnit})`
           : `Kunjungan satu poli: ${rec.no_transaksi}`);
-        let td: { rows?: RajalTindakanRow[] };
-        try {
-          // `kasir.getListTindakan` returns an empty body for every outpatient
-          // transaction on this backend (the kasir cashier only answers inside a
-          // loaded kasir page). The poli-side controller carries the same billed
-          // lines — `nama_tindakan`, `jumlah`, `flag`, `urut_tindakan` — and
-          // answers reliably. Read it once here; `check_payment` reuses the rows
-          // for the payable amount and the already-paid signal instead of the
-          // equally dead `kasir.getJumlahBayar`.
-          td = await client.postJson<{ rows?: RajalTindakanRow[] }>(
-            'poliklinik.getListTindakan',
-            {
-              no_transaksi: rec.no_transaksi,
-              page: '1',
-              rows: '100',
-            },
-            { signal: ctx.signal },
-          );
-        } catch (err) {
+        // `kasir.getListTindakan` returns an empty body for every outpatient
+        // transaction on this backend (the kasir cashier only answers inside a
+        // loaded kasir page). The poli-side controller carries the same billed
+        // lines — `nama_tindakan`, `jumlah`, `flag`, `urut_tindakan` — and
+        // answers reliably. Read it once here; `check_payment` reuses the rows
+        // for the payable amount and the already-paid signal instead of the
+        // equally dead `kasir.getJumlahBayar`.
+        const read = await attempt(() => client.postJson<{ rows?: RajalTindakanRow[] }>(
+          'poliklinik.getListTindakan',
+          {
+            no_transaksi: rec.no_transaksi,
+            page: '1',
+            rows: '100',
+          },
+          { signal: ctx.signal },
+        ));
+        if (!read.ok) {
           // Parity item 13: an unreadable read is "not read", never a crash.
-          review.push(
-            `Daftar tindakan tidak terbaca pada ${rec.no_transaksi}: ${err instanceof Error ? err.message : String(err)}`,
-          );
+          review.push(`Daftar tindakan tidak terbaca pada ${rec.no_transaksi}: ${read.message}`);
           dropped.add(rec.no_transaksi);
           continue;
         }
+        const td = read.value;
         // Legacy source line 898: a reply with no `rows` array is not an empty
         // bill, it is an unread bill.
         if (!Array.isArray(td?.rows)) {
@@ -1058,7 +827,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
           continue;
         }
         const allRows = td.rows;
-        const unknown = allRows.filter((row) => isUnknownPenunjangTreatmentName(row.nama_tindakan ?? ''));
+        const unknown = unclassifiedPenunjangRows(allRows);
         if (unknown.length > 0) {
           review.push(`Penunjang belum digolongkan pada ${rec.no_transaksi}: ${unknown.map((row) => row.nama_tindakan).join(', ')}`);
           dropped.add(rec.no_transaksi);
@@ -1066,57 +835,30 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
         }
         totalCount += allRows.length;
 
-        // Legacy `verifyTreatmentGroups` (source lines 762-782): the skip list
-        // and the grouped AND/OR requirements. Both were absent from the port —
-        // `RAJAL_TREATMENT_TEMPLATES` was exported for the UI but never enforced.
+        // Legacy `verifyTreatmentGroups` (source lines 762-782) plus the
+        // operator include/exclude filter — see `evaluateRajalBillRules`.
         const billedNames = allRows.map((row) => row.nama_tindakan ?? '');
         for (const item of rajalTreatmentChecklist(billedNames, cfg.treatmentGroups ?? [], cfg.skipTreatments ?? [])) {
           checklist.push(matching.length > 1 ? { ...item, label: `${rec.no_transaksi} · ${item.label}` } : item);
         }
-        const verdict = verifyRajalTreatmentGroups(
-          billedNames,
-          cfg.treatmentGroups ?? [],
-          cfg.skipTreatments ?? [],
-        );
-        if (!verdict.ok && verdict.kind === 'skip') {
-          hard.push(`Excluded treatment found on ${rec.no_transaksi}: "${verdict.keyword}" (found: "${verdict.found}")`);
+        const bill = evaluateRajalBillRules(rec.no_transaksi, allRows, {
+          include,
+          exclude,
+          groups: cfg.treatmentGroups ?? [],
+          skipTreatments: cfg.skipTreatments ?? [],
+          minCount: cfg.tindakanMinCount,
+        });
+        if (!bill.ok) {
+          (bill.severity === 'hard' ? hard : review).push(bill.reason);
           dropped.add(rec.no_transaksi);
           continue;
         }
-        if (!verdict.ok) {
-          hard.push(
-            `Required treatment group ${verdict.group} unsatisfied on ${rec.no_transaksi}: none of ${verdict.expected
-              .map((name) => `"${name}"`)
-              .join(' OR ')} billed`,
-          );
-          dropped.add(rec.no_transaksi);
-          continue;
-        }
-
-        const excludedRows = allRows.filter((row) => exclude.some((keyword) => tindakanName(row).includes(keyword)));
-        if (excludedRows.length > 0) {
-          hard.push(
-            `Excluded treatment found on ${rec.no_transaksi}: ${excludedRows.map((row) => row.nama_tindakan ?? '(tanpa nama)').join(', ')}`,
-          );
-          dropped.add(rec.no_transaksi);
-          continue;
-        }
-        const rows = allRows.filter((row) => include.length === 0 || include.some((keyword) => tindakanName(row).includes(keyword)));
-        if (cfg.tindakanMinCount && rows.length < cfg.tindakanMinCount) {
-          hard.push(`Only ${rows.length}/${allRows.length} treatment row(s) matched on ${rec.no_transaksi}; minimum ${cfg.tindakanMinCount}`);
-          dropped.add(rec.no_transaksi);
-          continue;
-        }
-        if (rows.length === 0) {
-          review.push(allRows.length === 0 ? `Tidak ada tindakan pada ${rec.no_transaksi}` : `Tidak ada tindakan yang cocok dengan aturan pada ${rec.no_transaksi}`);
-          dropped.add(rec.no_transaksi);
-          continue;
-        }
+        const rows = bill.rows;
         matchedCount += rows.length;
         treatmentStates.push({ record: rec, rows, allRows });
       }
-      ctx.scratch.rajalConsultByTrx = consultByTrx;
-      ctx.scratch.treatments = treatmentStates;
+      state.rajalConsultByTrx = consultByTrx;
+      state.treatments = treatmentStates;
       if (dropped.size > 0) {
         pruneRajalRecords(ctx, dropped);
         if (hard.length > 0 && treatmentStates.length === 0) {
@@ -1151,7 +893,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
           { nomedrec: medrec, page: '1', rows: '10' },
           { signal: ctx.signal },
         );
-        const sameDay = (history.rows ?? []).filter((row) => (row.tgl_order ?? '').startsWith(date));
+        const sameDay = rowsField(history).filter((row) => (row.tgl_order ?? '').startsWith(date));
         if (sameDay.length === 0) {
           return blocked(
             `Order radiologi belum ada pada ${record.no_transaksi}: ${orders.length} tindakan radiologi ditagih tetapi tidak ada order tanggal ${date}`,
@@ -1175,7 +917,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
           { txtmedreccari_hslrad: medrec },
           { signal: ctx.signal },
         );
-        const results = (search.rows ?? []).filter((row) => (row.tgl_transaksi ?? '').startsWith(date));
+        const results = rowsField(search).filter((row) => (row.tgl_transaksi ?? '').startsWith(date));
         if (results.length !== orders.length) {
           return blocked(
             `Hasil radiologi kurang pada ${record.no_transaksi}: ${orders.length} tindakan radiologi ditagih vs ${results.length} transaksi hasil tanggal ${date}`,
@@ -1215,7 +957,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
           { no_medicalrecord: medrec },
           { signal: ctx.signal },
         );
-        const results = (history.rows ?? []).filter((row) => (row.tgl_transaksi ?? '').startsWith(date));
+        const results = rowsField(history).filter((row) => (row.tgl_transaksi ?? '').startsWith(date));
         if (results.length !== orders.length) {
           return blocked(
             `Hasil elektromedik kurang pada ${record.no_transaksi}: ${orders.length} tindakan elektromedik ditagih vs ${results.length} transaksi hasil tanggal ${date}`,
@@ -1251,7 +993,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
           { nomedrec: medrec, page: '1', rows: '10' },
           { signal: ctx.signal },
         );
-        const rows = history.rows ?? [];
+        const rows = rowsField(history);
         if (rows.length === 0) {
           return blocked(
             `Order Lab PA belum ada pada ${record.no_transaksi}: ${orders.length} tindakan PA ditagih tetapi tidak ada order PA`,
@@ -1271,7 +1013,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
           {},
           { query: { no_trans: paTx }, signal: ctx.signal },
         );
-        if ((detail.rows ?? []).length === 0) {
+        if (rowsField(detail).length === 0) {
           return blocked(
             `Order Lab PA belum lengkap pada ${record.no_transaksi}: order PA ${paTx} tidak punya baris pemeriksaan`,
           );
@@ -1319,7 +1061,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
           { signal: ctx.signal },
         );
         const legacyDate = formatRajalLegacyDate(date);
-        const order = (history.rows ?? []).find((row) => row.tgl_transaksi === legacyDate);
+        const order = rowsField(history).find((row) => row.tgl_transaksi === legacyDate);
         const labTx = (order?.no_transaksi ?? '').trim();
         if (!labTx) {
           return blocked(
@@ -1346,23 +1088,17 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
         const target = resolveRajalLisPdfTarget(markup, labTx);
         if (target.kind === 'old-lis') return null;
         const query = { no_transaksi: target.noTransaksi };
-        let headVerdict: ReturnType<typeof evaluateRajalLabPdfHead> = null;
-        try {
-          const head = await client.raw('laboratoriumHasil.lisPdfHead', { query, signal: ctx.signal });
-          headVerdict = head.status >= 200 && head.status < 300 ? evaluateRajalLabPdfHead(head.headers) : null;
-        } catch {
-          // Legacy falls back to GET when the HEAD probe cannot be read.
-        }
-        let verdict = headVerdict;
+        // Legacy falls back to GET when the HEAD probe cannot be read.
+        const head = await attempt(() => client.raw('laboratoriumHasil.lisPdfHead', { query, signal: ctx.signal }));
+        let verdict = head.ok && head.value.status >= 200 && head.value.status < 300 ? evaluateRajalLabPdfHead(head.value.headers) : null;
         if (!verdict) {
-          try {
-            const get = await client.raw('laboratoriumHasil.lisPdf', { query, signal: ctx.signal });
-            verdict = evaluateRajalLabPdfGet(get.status, get.bodyBytes);
-          } catch (err) {
+          const pdf = await attempt(() => client.raw('laboratoriumHasil.lisPdf', { query, signal: ctx.signal }));
+          if (!pdf.ok) {
             return blocked(
-              `Hasil laboratorium belum ada pada ${record.no_transaksi}: order lab ${labTx} galat GET: ${err instanceof Error ? err.message : String(err)}`,
+              `Hasil laboratorium belum ada pada ${record.no_transaksi}: order lab ${labTx} galat GET: ${pdf.message}`,
             );
           }
+          verdict = evaluateRajalLabPdfGet(pdf.value.status, pdf.value.bodyBytes);
         }
         if (!verdict.hasResult) {
           return blocked(
@@ -1385,20 +1121,21 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
      * Update SEP means a reviewable plan requiring approval, never an immediate write.
      */
     'rajal.validateSep': async (ctx) => {
-      const cfg = get<RajalInput>(ctx, 'config')!;
-      const clinics = get<string[]>(ctx, 'clinics') ?? [];
+      const state = rajalState(ctx);
+      const cfg = state.config!;
+      const clinics = state.clinics ?? [];
       // Legacy source line 1057 builds the sibling set from `matching` — the
       // records that passed the clinic/date/penjamin filter — not from the raw
       // history. Using the history would let a dropped penunjang visit donate
       // its SEP to a clinic bill.
-      const matching = get<RajalRecordRow[]>(ctx, 'matching') ?? [];
-      const transactions = get<RajalTransactionState[]>(ctx, 'transactions') ?? [];
-      if (transactions.length === 0) return { status: 'skipped', summary: 'Tidak ada transaksi' };
+      const matching = state.matching ?? [];
+      const transactions = state.transactions ?? [];
+      if (transactions.length === 0) return skipped('Tidak ada transaksi');
       // Legacy `sepCheckRequired = false`: no SEP lookup and no correction plan.
       // `skipped` is benign in the runner, so payment checks still run.
       if (cfg.sepCheckRequired === false) {
         ctx.log('Validasi SEP dinonaktifkan untuk run ini (sepCheckRequired = false)');
-        return { status: 'skipped', summary: 'Validasi SEP dinonaktifkan untuk run ini' };
+        return skipped('Validasi SEP dinonaktifkan untuk run ini');
       }
       const plans: MutationPlan[] = [];
       const kept: RajalTransactionState[] = [];
@@ -1443,63 +1180,31 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
           continue;
         }
 
-        let rows: readonly RajalSepRow[];
-        try {
-          rows = await fetchSepHistory(client, card, ctx);
-        } catch (err) {
+        const history = await attempt(() => fetchSepHistory(client, card, ctx));
+        if (!history.ok) {
           sepChecks.push({ label: sepLabel(record.no_transaksi), ok: false, detail: 'riwayat SEP BPJS tidak terbaca' });
-          failed.push(`Riwayat SEP tidak terbaca pada ${record.no_transaksi}: ${err instanceof Error ? err.message : String(err)}`);
+          failed.push(`Riwayat SEP tidak terbaca pada ${record.no_transaksi}: ${history.message}`);
           dropped.add(record.no_transaksi);
           continue;
         }
-        const sameDay = rows.filter(
-          (row) =>
-            // Normalize before comparing: BPJS rows carry timestamps
-            // ("2026-10-21 00:00:00") and DD/MM/YYYY, so a raw compare dropped
-            // a same-day SEP into the "no SEP" branch.
-            normalizeDate(row.tgl_sep ?? '') === date &&
-            (row.jns_pelayanan ?? '').toUpperCase().trim() === RAJAL_SEP_SERVICE_TYPE,
-        );
-        let resolved = (sameDay.find((row) => sepPoliMatches(row.poli_tujuan ?? '', candidates))?.no_sep ?? '').trim();
-
-        if (!resolved) {
-          // Same-day sibling clinics: their SEP is reused as the poli asal SEP,
-          // but only when exactly one candidate exists.
-          const dayVisits = matching.filter(
+        const sep = resolveRajalSep({
+          rows: history.value,
+          date,
+          candidates,
+          clinic,
+          sameDayVisits: matching.filter(
             (row) => row.patientId === record.patientId && recordVisitDate(row, cfg.date) === date,
-          );
-          if (dayVisits.length > 1) {
-            // Legacy source line 832 falls back to the raw unit name when the
-            // scored matcher finds nothing, so a sibling visit still donates a
-            // candidate poli.
-            const siblingCandidates = [
-              ...new Set(
-                dayVisits
-                  .map((row) => matchedClinic(row, clinics) || (row.nama_unit ?? '').trim())
-                  .filter((name) => Boolean(name) && name !== clinic),
-              ),
-            ].flatMap((name) => rajalClinicCandidates(name));
-            const siblingSeps = [
-              ...new Set(
-                sameDay
-                  .filter((row) => sepPoliMatches(row.poli_tujuan ?? '', siblingCandidates))
-                  .map((row) => (row.no_sep ?? '').trim())
-                  .filter(Boolean),
-              ),
-            ];
-            if (siblingSeps.length > 1) {
-              sepChecks.push({ label: sepLabel(record.no_transaksi), ok: false, detail: `lebih dari satu kandidat SEP: ${siblingSeps.join(', ')}` });
-              hard.push(`Multiple same-day SEP candidates for transaction ${record.no_transaksi} (${siblingSeps.join(', ')})`);
-              dropped.add(record.no_transaksi);
-              continue;
-            }
-            const sibling = siblingSeps[0];
-            if (sibling) {
-              ctx.log(`Memakai SEP poli serumpun ${sibling} untuk ${clinic}`, 'info');
-              resolved = sibling;
-            }
-          }
+          ),
+          clinics,
+        });
+        if (sep.kind === 'ambiguous') {
+          sepChecks.push({ label: sepLabel(record.no_transaksi), ok: false, detail: `lebih dari satu kandidat SEP: ${sep.candidates.join(', ')}` });
+          hard.push(`Multiple same-day SEP candidates for transaction ${record.no_transaksi} (${sep.candidates.join(', ')})`);
+          dropped.add(record.no_transaksi);
+          continue;
         }
+        if (sep.kind === 'sibling') ctx.log(`Memakai SEP poli serumpun ${sep.noSep} untuk ${clinic}`, 'info');
+        const resolved = sep.kind === 'none' ? '' : sep.noSep;
 
         if (!resolved) {
           sepChecks.push({ label: sepLabel(record.no_transaksi), ok: false, detail: `tidak ada SEP ${RAJAL_SEP_SERVICE_TYPE} tgl ${date} untuk poli ${candidates[0] ?? clinic}` });
@@ -1558,27 +1263,22 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
         }
       }
       if (dropped.size > 0) {
-        ctx.scratch.transactions = kept;
+        state.transactions = kept;
         pruneRajalRecords(ctx, dropped);
         if (kept.length === 0) {
           if (hard.length > 0) return withSepReasoning(blocked(hard.length === 1 ? hard[0]! : `Blocker SEP: ${hard.join('; ')}`));
-          return withSepReasoning({ status: 'failed', summary: failed.join('; ') });
+          return withSepReasoning(fail(failed.join('; ')));
         }
-        return withSepReasoning({
-          status: 'needs_review',
-          summary: `${kept.length} SEP transaksi tersisa; ${[...hard, ...failed].length} dilewati — ${[
-            ...hard,
-            ...failed,
-          ].join('; ')}`,
-          proposedMutations: plans,
-        });
+        return withSepReasoning(review(`${kept.length} SEP transaksi tersisa; ${[...hard, ...failed].length} dilewati — ${[
+          ...hard,
+          ...failed,
+        ].join('; ')}`, { proposedMutations: plans }));
       }
       if (plans.length > 0) {
-        return withSepReasoning({
-          status: 'needs_review',
-          summary: `SEP tidak cocok pada ${plans.length}/${transactions.length} transaksi; koreksi direncanakan (dry-run)`,
-          proposedMutations: plans,
-        });
+        return withSepReasoning(review(
+          `SEP tidak cocok pada ${plans.length}/${transactions.length} transaksi; koreksi direncanakan (dry-run)`,
+          { proposedMutations: plans },
+        ));
       }
       return withSepReasoning(ok(`${transactions.length} SEP transaksi cocok dengan tanggal kunjungan dan poli tujuan`));
     },
@@ -1591,13 +1291,13 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
      */
     'rajal.checkBerkas': async (ctx) => {
       const reader = deps.berkas;
-      if (!reader) return { status: 'skipped', summary: 'Cek berkas (OCR) tidak tersedia di host ini' };
-      const cfg = get<RajalInput>(ctx, 'config')!;
-      const treatments = get<RajalTreatmentState[]>(ctx, 'treatments') ?? [];
+      if (!reader) return skipped('Cek berkas (OCR) tidak tersedia di host ini');
+      const cfg = rajalState(ctx).config!;
+      const treatments = rajalState(ctx).treatments ?? [];
       // One bundle per registration; same-day clinics have their own.
       const visits = new Map<string, RajalTreatmentState[]>();
       for (const state of treatments) visits.set(state.record.no_registrasikunjungan, [...(visits.get(state.record.no_registrasikunjungan) ?? []), state]);
-      if (visits.size === 0) return { status: 'skipped', summary: 'Tidak ada kunjungan' };
+      if (visits.size === 0) return skipped('Tidak ada kunjungan');
       const items: ReasoningItem[] = [];
       const missing: string[] = [];
       for (const [reg, states] of visits) {
@@ -1606,14 +1306,9 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
         const date = recordVisitDate(record, cfg.date);
         const who = `${patientId} · ${record.nama_unit ?? record.kd_unit}`;
         const progress = (p: BerkasProgressPort) =>
-          ctx.log(`Berkas ${who}: ${p.label}`, 'debug', { berkasProgress: { phase: p.phase, done: p.done, total: p.total, label: visits.size > 1 ? `${patientId}: ${p.label}` : p.label } });
-        let row: Record<string, unknown> | undefined;
-        try {
-          const index = await client.postJson<{ rows?: Record<string, unknown>[] }>('uploadBerkas.getDataPiutang', berkasIndexPayload(patientId, date), { signal: ctx.signal });
-          row = (index?.rows ?? []).find((r) => String(r['no_registrasikunjungan'] ?? '') === reg);
-        } catch (err) {
-          ctx.log(`Read uploadBerkas.getDataPiutang gagal: ${err instanceof Error ? err.message : String(err)}`, 'debug');
-        }
+          ctx.log(`Berkas ${who}: ${p.label}`, 'debug', { [BERKAS_PROGRESS_KEY]: { phase: p.phase, done: p.done, total: p.total, label: visits.size > 1 ? `${patientId}: ${p.label}` : p.label } });
+        const index = await softJson<{ rows?: Record<string, unknown>[] }>(ctx, client, 'uploadBerkas.getDataPiutang', berkasIndexPayload({ noRm: patientId, from: date, to: date, kdInstalasi: '1' }));
+        const row = rowsField(index).find((r) => String(r['no_registrasikunjungan'] ?? '') === reg);
         const noSep = String(row?.['no_sep'] ?? '').trim();
         if (!noSep) {
           missing.push(`${who}: berkas e-klaim ${row ? 'tanpa SEP' : 'belum ditemukan'}`);
@@ -1621,13 +1316,8 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
           continue;
         }
         progress({ phase: 'unduh', done: 0, total: 1, label: 'mengunduh PDF berkas…' });
-        let pdf: Uint8Array | undefined;
-        try {
-          const res = await client.raw('eklaim.cetakSimplifikasi', { query: { no_transaksi: 'undefined', no_sep: noSep, no_register: reg, kd_instalasi: '1' }, signal: ctx.signal });
-          if (res.status === 200 && res.bodyBytes && String.fromCharCode(...res.bodyBytes.subarray(0, 4)) === '%PDF') pdf = res.bodyBytes;
-        } catch (err) {
-          ctx.log(`Read eklaim.cetakSimplifikasi gagal: ${err instanceof Error ? err.message : String(err)}`, 'debug');
-        }
+        const res = await softRead(ctx, 'eklaim.cetakSimplifikasi', () => client.raw('eklaim.cetakSimplifikasi', { query: { no_transaksi: 'undefined', no_sep: noSep, no_register: reg, kd_instalasi: '1' }, signal: ctx.signal }), undefined);
+        const pdf = res && res.status === 200 && res.bodyBytes && String.fromCharCode(...res.bodyBytes.subarray(0, 4)) === '%PDF' ? res.bodyBytes : undefined;
         if (!pdf) {
           missing.push(`${who}: PDF berkas tidak terbaca`);
           items.push({ label: `Berkas ${who}`, ok: false, detail: 'PDF tidak terbaca' });
@@ -1653,7 +1343,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
         for (const check of result.missing) missing.push(visits.size > 1 ? `${who}: ${check.label}` : check.label);
       }
       const result: StepResult = missing.length
-        ? { status: 'needs_review', summary: `Berkas belum lengkap: ${missing.join(', ')} — periksa manual` }
+        ? review(`Berkas belum lengkap: ${missing.join(', ')} — periksa manual`)
         : ok(`Berkas lengkap untuk ${visits.size} kunjungan`);
       return { ...result, evidence: [reasoningEvidence({ title: 'Dokumen wajib klaim dicari di berkas e-klaim (judul halaman, OCR untuk foto)', items })] };
     },
@@ -1663,8 +1353,8 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
       // read via `poliklinik.getListTindakan` (the kasir `getJumlahBayar` is dead
       // on this backend). A line's `flag` is `"Belum"`/`"Sudah"`; the payable
       // total is the sum of `jumlah`, and `sudah` is the sum already paid.
-      const treatments = get<RajalTreatmentState[]>(ctx, 'treatments') ?? [];
-      if (treatments.length === 0) return { status: 'skipped', summary: 'Tidak ada kunjungan', branches: { check_payment__check_verification: 'skip' } };
+      const treatments = rajalState(ctx).treatments ?? [];
+      if (treatments.length === 0) return skipped('Tidak ada kunjungan', { branches: { check_payment__check_verification: 'skip' } });
       const payable: RajalPaymentState[] = [];
       let paid = 0;
       const unreadable: string[] = [];
@@ -1677,16 +1367,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
         : result);
       for (const state of treatments) {
         const { record, allRows } = state;
-        let total = 0;
-        let sudah = 0;
-        let sawFlag = false;
-        for (const row of allRows) {
-          const amount = Number(row.jumlah ?? '0') || 0;
-          total += amount;
-          const flag = (row.flag ?? '').trim().toUpperCase();
-          if (flag) sawFlag = true;
-          if (flag === 'SUDAH' || flag === 'LUNAS' || flag === 'PIUTANG') sudah += amount;
-        }
+        const { total, sudah, sawFlag } = tallyRajalBillLines(allRows);
         // Billing lines but no paid flag anywhere = the payment state could not
         // be read. Surface it for review rather than silently dropping the
         // record (parity: "unreadable read is not read", never a silent skip).
@@ -1706,22 +1387,21 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
           dropped.add(record.no_transaksi);
         }
       }
-      ctx.scratch.payable = payable;
+      rajalState(ctx).payable = payable;
       if (dropped.size > 0) pruneRajalRecords(ctx, dropped);
       ctx.log(
         `Cek pembayaran: ${payable.length} bisa dibayar, ${paid} sudah dibayar${unreadable.length ? `, ${unreadable.length} unreadable` : ''}`,
         unreadable.length > 0 ? 'warn' : 'info',
       );
       if (unreadable.length > 0) {
-        return withPayReasoning({
-          status: 'needs_review',
-          summary: payable.length === 0
+        return withPayReasoning(review(
+          payable.length === 0
             ? `Status bayar tidak terbaca pada ${unreadable.length}/${treatments.length} kunjungan: ${unreadable.join(', ')}`
             : `${payable.length}/${treatments.length} payable record(s); payment state unreadable on ${unreadable.length}: ${unreadable.join(', ')}`,
-          branches: { check_payment__check_verification: payable.length > 0 ? 'take' : 'block' },
-        });
+          { branches: { check_payment__check_verification: payable.length > 0 ? 'take' : 'block' } },
+        ));
       }
-      if (payable.length === 0) return withPayReasoning({ status: 'skipped', summary: `Sudah dibayar (${paid} kunjungan)`, branches: { check_payment__check_verification: 'skip' } });
+      if (payable.length === 0) return withPayReasoning(skipped(`Sudah dibayar (${paid} kunjungan)`, { branches: { check_payment__check_verification: 'skip' } }));
       return withPayReasoning({ ...ok(`${payable.length}/${treatments.length} kunjungan bisa dibayar`), branches: { check_payment__check_verification: 'take' } });
     },
 
@@ -1738,8 +1418,9 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
      * write has to be planned first.
      */
     'rajal.checkVerification': async (ctx) => {
-      const payable = get<RajalPaymentState[]>(ctx, 'payable') ?? [];
-      if (payable.length === 0) return { status: 'skipped', summary: 'Tidak ada kunjungan', branches: { check_verification__submit_payment: 'skip' } };
+      const state = rajalState(ctx);
+      const payable = state.payable ?? [];
+      if (payable.length === 0) return skipped('Tidak ada kunjungan', { branches: { check_verification__submit_payment: 'skip' } });
       const plans: MutationPlan[] = [];
       const kept: RajalPaymentState[] = [];
       const hard: string[] = [];
@@ -1752,51 +1433,51 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
       // pays; without this barrier the payment plan was built from
       // `cekstatus_verifikasi === '0'` (not yet verified) and could be approved
       // against a bill whose verification never landed.
-      const previouslyPlanned = (ctx.scratch.verificationPlanByTrx as Record<string, string> | undefined) ?? {};
+      const previouslyPlanned = state.verificationPlanByTrx ?? {};
       const observedTrx = Object.keys(previouslyPlanned);
       if (observedTrx.length > 0) {
         const confirmed: RajalPaymentState[] = [];
         const stillOpen: RajalPaymentState[] = [];
         const notLanded: string[] = [];
-        for (const state of payable) {
-          const planId = previouslyPlanned[state.record.no_transaksi];
+        for (const entry of payable) {
+          const planId = previouslyPlanned[entry.record.no_transaksi];
           if (!planId) {
-            stillOpen.push(state);
+            stillOpen.push(entry);
             continue;
           }
           const outcome = ctx.mutations[planId];
           if (outcome?.status === 'verified') {
             alreadyVerified += 1;
-            confirmed.push(state);
+            confirmed.push(entry);
           } else if (outcome?.status === 'applied') {
-            notLanded.push(`${state.record.no_transaksi}: terpasang tapi belum terverifikasi read-after-write`);
+            notLanded.push(`${entry.record.no_transaksi}: terpasang tapi belum terverifikasi read-after-write`);
           } else if (outcome) {
-            notLanded.push(`${state.record.no_transaksi}: verifikasi ${outcome.status}${outcome.reason ? ` — ${outcome.reason}` : ''}`);
+            notLanded.push(`${entry.record.no_transaksi}: verifikasi ${outcome.status}${outcome.reason ? ` — ${outcome.reason}` : ''}`);
           }
         }
         // A record whose verification was planned but never settled keeps
         // waiting; the runner parks this node until every plan settles.
         if (notLanded.length === 0 && stillOpen.length === 0) {
-          ctx.scratch.payable = confirmed;
+          state.payable = confirmed;
           return { ...ok(`${confirmed.length} kunjungan terverifikasi; siap dirancang pembayarannya`), branches: { check_verification__submit_payment: confirmed.length > 0 ? 'take' : 'skip' } };
         }
         if (notLanded.length > 0) {
           // Drop the records whose verification did not land: they must not be
           // paid, whatever the rest of the batch does.
           const droppedTrx = new Set(notLanded.map((entry) => entry.split(':')[0]!));
-          ctx.scratch.payable = payable.filter((state) => !droppedTrx.has(state.record.no_transaksi));
+          state.payable = payable.filter((entry) => !droppedTrx.has(entry.record.no_transaksi));
           pruneRajalRecords(ctx, droppedTrx);
           return {
             status: 'needs_review',
             summary: `Verifikasi belum berhasil untuk ${notLanded.length} kunjungan: ${notLanded.join('; ')}`,
-            branches: { check_verification__submit_payment: ctx.scratch.payable && (ctx.scratch.payable as RajalPaymentState[]).length > 0 ? 'take' : 'block' },
+            branches: { check_verification__submit_payment: state.payable && state.payable.length > 0 ? 'take' : 'block' },
           };
         }
         // Still-open records fall through to the normal first-pass handling.
-        ctx.scratch.payable = [...confirmed, ...stillOpen];
+        state.payable = [...confirmed, ...stillOpen];
       }
-      for (const state of payable) {
-        const { record } = state;
+      for (const entry of payable) {
+        const { record } = entry;
         const orderArgs = {
           no_registrasikunjungan: record.no_registrasikunjungan,
           no_transaksi: record.no_transaksi,
@@ -1856,12 +1537,12 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
           dropped.add(record.no_transaksi);
           continue;
         }
-        if (status === '0' && get<RajalInput>(ctx, 'config')?.enableVerifikasi === false) {
+        if (status === '0' && state.config?.enableVerifikasi === false) {
           review.push(`${record.no_transaksi} belum diverifikasi — Verifikasi dimatikan di Setup`);
           dropped.add(record.no_transaksi);
           continue;
         }
-        kept.push(state);
+        kept.push(entry);
         if (status !== '0') {
           alreadyVerified += 1;
           continue;
@@ -1956,10 +1637,10 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
         const trx = plan.idempotencyKey?.split(':')[1];
         if (trx) planByTrx[trx] = plan.id;
       }
-      ctx.scratch.verificationPlanByTrx = planByTrx;
+      state.verificationPlanByTrx = planByTrx;
 
       if (dropped.size > 0) {
-        ctx.scratch.payable = kept;
+        state.payable = kept;
         pruneRajalRecords(ctx, dropped);
         if (kept.length === 0 && hard.length > 0) return { ...blocked(hard.length === 1 ? hard[0]! : `Blocker verifikasi: ${hard.join('; ')}`), branches: { check_verification__submit_payment: 'block' } };
         return {
@@ -1990,14 +1671,15 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
     },
 
     'rajal.submitPayment': async (ctx) => {
-      const cfg = get<RajalInput>(ctx, 'config')!;
-      const payable = get<RajalPaymentState[]>(ctx, 'payable') ?? [];
-      const treatments = get<RajalTreatmentState[]>(ctx, 'treatments') ?? [];
-      if (payable.length === 0) return { status: 'skipped', summary: 'Tidak ada kunjungan untuk dibayar' };
-      if (cfg.enableTampungBayar === false) return { status: 'skipped', summary: `Tampung bayar dimatikan di Setup — ${payable.length} kunjungan siap dibayar tidak dirancang` };
+      const state = rajalState(ctx);
+      const cfg = state.config!;
+      const payable = state.payable ?? [];
+      const treatments = state.treatments ?? [];
+      if (payable.length === 0) return skipped('Tidak ada kunjungan untuk dibayar');
+      if (cfg.enableTampungBayar === false) return skipped(`Tampung bayar dimatikan di Setup — ${payable.length} kunjungan siap dibayar tidak dirancang`);
       // Second pass on a write run: the node parked until every payment settled; report, never re-plan.
       if (ctx.pass > 1) {
-        const planIds = get<string[]>(ctx, 'paymentPlanIds') ?? [];
+        const planIds = state.paymentPlanIds ?? [];
         const statuses = planIds.map((id) => ctx.mutations[id]?.status ?? 'planned');
         const paid = statuses.filter((status) => status === 'verified' || status === 'applied').length;
         const summary = `${paid}/${planIds.length} tampung bayar tertulis${paid < planIds.length ? `; ${planIds.length - paid} tidak tertulis — lihat rincian rencana` : ''}`;
@@ -2009,24 +1691,23 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
       // property: stdClass::$no_transaksi" (kasir.php:7743, run 2026-10-20).
       // A bill whose kasir rows are missing or disagree with the poli rows
       // gets no plan: never stage a payment over lines we could not match.
-      const kasirRows = new Map<string, unknown[]>();
+      const kasirRows = new Map<string, readonly unknown[]>();
       const held: string[] = [];
       for (const { record } of payable) {
-        const billed = treatments.find((state) => state.record.no_transaksi === record.no_transaksi);
-        let rows: unknown[] = [];
-        try {
-          const res = await client.postJson<{ rows?: unknown[] } | unknown[]>('kasir.getListTindakan', {
-            no_transaksi: record.no_transaksi,
-            no_registrasikunjungan: record.no_registrasikunjungan,
-            kd_unit: record.kd_unit,
-            page: '1',
-            rows: '200',
-          }, { signal: ctx.signal });
-          rows = Array.isArray(res) ? res : res?.rows ?? [];
-        } catch (err) {
-          held.push(`${record.no_transaksi}: baris kasir tidak terbaca (${err instanceof Error ? err.message.slice(0, 80) : String(err)})`);
+        const billed = treatments.find((entry) => entry.record.no_transaksi === record.no_transaksi);
+        const read = await attempt(() => client.postJson<{ rows?: unknown[] } | unknown[]>('kasir.getListTindakan', {
+          no_transaksi: record.no_transaksi,
+          no_registrasikunjungan: record.no_registrasikunjungan,
+          kd_unit: record.kd_unit,
+          page: '1',
+          rows: '200',
+        }, { signal: ctx.signal }));
+        if (!read.ok) {
+          held.push(`${record.no_transaksi}: baris kasir tidak terbaca (${read.error instanceof Error ? read.message.slice(0, 80) : read.message})`);
           continue;
         }
+        const res = read.value;
+        const rows: readonly unknown[] = Array.isArray(res) ? res : rowsField(res);
         const expected = billed?.allRows.length ?? 0;
         if (rows.length === 0 || rows.length !== expected) {
           held.push(`${record.no_transaksi}: ${rows.length} baris kasir vs ${expected} baris tindakan poli — tidak dirancang`);
@@ -2146,7 +1827,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
         };
       });
       for (const reason of held) ctx.log(reason, 'warn');
-      ctx.scratch.paymentPlanIds = plans.map((plan) => plan.id);
+      state.paymentPlanIds = plans.map((plan) => plan.id);
       const summary = `${plans.length} pembayaran direncanakan${ctx.mode === 'write' ? '' : ' (dry-run)'}${held.length ? `; ${held.length} ditahan — ${held.join('; ')}` : ''}`;
       // Park until the payments settle: the run must stay live while they are
       // approved and applied (manual or auto), or an approval after the run
@@ -2158,17 +1839,17 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
       if (ctx.mode !== 'write') return ok('Preview — tidak ada pembayaran untuk dikonfirmasi');
       const { verified, bad, open } = paymentTally(ctx);
       const summary = [`${verified} pembayaran terverifikasi`, bad ? `${bad} gagal — cek manual di SIMRS` : '', open ? `${open} belum selesai` : ''].filter(Boolean).join('; ');
-      return bad || open ? { status: 'needs_review', summary } : ok(summary);
+      return bad || open ? review(summary) : ok(summary);
     },
 
     'rajal.emitPatientSummary': (ctx) => {
-      const matching = get<RajalRecordRow[]>(ctx, 'matching') ?? [];
+      const matching = rajalState(ctx).matching ?? [];
       if (ctx.mode !== 'write') return ok(`Pasien diproses: ${matching.length} kunjungan ditinjau (preview)`);
       return ok(`Pasien diproses: ${matching.length} kunjungan; ${paymentTally(ctx).verified} dibayar`);
     },
 
     'rajal.emitBatchSummary': (ctx) => {
-      const total = get<number>(ctx, 'batchTotal') ?? 0;
+      const total = rajalState(ctx).batchTotal ?? 0;
       const outcomes = patientOutcomes(ctx);
       const passed = outcomes.filter((row) => row.status === 'lolos').length;
       const skippedCount = outcomes.length - passed;
@@ -2184,7 +1865,7 @@ export function createRajalExecutors(deps: RajalDeps): ExecutorRegistry {
       const mode = ctx.mode === 'write' ? `write: ${paymentTally(ctx).verified} pembayaran terverifikasi` : 'hanya preview — tidak ada write yang diterapkan';
       const summary = `Antrean selesai: ${passed} lolos, ${skippedCount} dilewati dari ${total} pasien; ${mode}`;
       ctx.log(summary, 'info');
-      const result = ok(summary, { evidence: [{ label: 'rajal.patient-outcomes', source: 'emit_batch_summary', data: { rows: outcomes } }] });
+      const result = ok(summary, { evidence: [{ label: RAJAL_PATIENT_OUTCOMES_EVIDENCE, source: RAJAL_NODE.emitBatchSummary, data: { rows: outcomes } }] });
       return skippedCount > 0 && passed === 0 ? { ...result, status: 'needs_review' } : result;
     },
   });
@@ -2282,7 +1963,8 @@ const recordOf = (entry: RajalRecordRow | { record: RajalRecordRow }): RajalReco
   'record' in entry ? entry.record : entry;
 
 function recordsIn(ctx: ExecutorContext, key: RecordKey): RajalRecordRow[] {
-  return (get<(RajalRecordRow | { record: RajalRecordRow })[]>(ctx, key) ?? []).map(recordOf);
+  const entries: readonly (RajalRecordRow | { record: RajalRecordRow })[] = rajalState(ctx)[key] ?? [];
+  return entries.map(recordOf);
 }
 
 /** Leads with the No. RM so a multi-patient batch reads per patient (the Log view groups on it). */
@@ -2318,7 +2000,7 @@ const PENUNJANG_CHECKS: Record<string, [string, (nameLower: string) => boolean]>
 
 function penunjangChecklist(kind: string, applies: (nameLower: string) => boolean): ChecklistBuilder {
   return ({ ctx, result, before }) => {
-    const states = get<RajalTreatmentState[]>(ctx, 'treatments') ?? [];
+    const states = rajalState(ctx).treatments ?? [];
     const items = keptDropped(before.treatments, recordsIn(ctx, 'treatments'), result, '').map((item, index): ReasoningItem => {
       if (!item.ok) return item;
       const trx = before.treatments[index]!.no_transaksi;
@@ -2344,15 +2026,16 @@ const RAJAL_CHECKLISTS: Record<string, ChecklistBuilder> = {
     return { title: 'Input run diperiksa', items: [
       { label: 'No RM diisi', ok: Boolean(input.patientIds?.length), detail: `${input.patientIds?.length ?? 0} pasien` },
       { label: 'Poli dipilih', ok: Boolean(input.clinics?.length), detail: input.clinics?.join(', ') || 'kosong' },
-      { label: 'Penjamin diterima', ok: null, detail: (input.acceptedPenjaminKeywords ?? ACCEPTED_DEFAULT).join(', ') },
+      { label: 'Penjamin diterima', ok: null, detail: (input.acceptedPenjaminKeywords ?? RAJAL_DEFAULT_ACCEPTED_PENJAMIN).join(', ') },
       { label: 'Cek SEP', ok: null, detail: input.sepCheckRequired === false ? 'dinonaktifkan' : 'aktif' },
     ] };
   },
   normalizeIds: ({ ctx, result }) => {
-    const ids = get<string[]>(ctx, 'ids') ?? [];
-    const batch = get<RajalUnpaidBatch>(ctx, 'discovery');
+    const state = rajalState(ctx);
+    const ids = state.ids ?? [];
+    const batch = state.discovery;
     const items: ReasoningItem[] = [];
-    if (get<RajalInput>(ctx, 'config')?.discovery) {
+    if (state.config?.discovery) {
       items.push(batch
         ? { label: 'Laporan belum bayar terbaca', ok: true, detail: `${batch.stats.total} baris, ${batch.stats.filtered} cocok filter` }
         : { label: 'Laporan belum bayar terbaca', ok: false, detail: result.summary });
@@ -2362,17 +2045,17 @@ const RAJAL_CHECKLISTS: Record<string, ChecklistBuilder> = {
     return { title: `${ids.length} No RM unik`, items };
   },
   resolveClinics: ({ ctx, result }) => {
-    const clinics = get<string[]>(ctx, 'clinics') ?? [];
+    const clinics = rajalState(ctx).clinics ?? [];
     return { title: 'Poli yang diproses', items: clinics.length
       ? clinics.map((clinic): ReasoningItem => ({ label: clinic, ok: true, detail: 'dipilih di Setup' }))
       : [{ label: 'Poli terpilih', ok: false, detail: result.summary }] };
   },
   startBatch: ({ ctx }) => ({ title: 'Batch dimulai', items: [
-    { label: 'Pasien dalam batch', ok: null, detail: String(get<number>(ctx, 'batchTotal') ?? 0) },
+    { label: 'Pasien dalam batch', ok: null, detail: String(rajalState(ctx).batchTotal ?? 0) },
   ] }),
   loadHistory: ({ ctx, result }) => {
-    const history = get<RajalRecordRow[]>(ctx, 'history') ?? [];
-    const items = (get<string[]>(ctx, 'ids') ?? []).map((id): ReasoningItem => {
+    const history = rajalState(ctx).history ?? [];
+    const items = (rajalState(ctx).ids ?? []).map((id): ReasoningItem => {
       const rows = history.filter((row) => row.patientId === id).length;
       if (rows > 0) return { label: id, ok: true, detail: `${rows} kunjungan terbaca` };
       return result.summary.includes(id) ? { label: id, ok: false, detail: 'riwayat kunjungan tidak terbaca' } : { label: id, ok: null, detail: 'tidak ada kunjungan' };
@@ -2380,12 +2063,12 @@ const RAJAL_CHECKLISTS: Record<string, ChecklistBuilder> = {
     return { title: 'Riwayat kunjungan per pasien', items };
   },
   filterRecords: ({ ctx, result }) => {
-    const cfg = get<RajalInput>(ctx, 'config');
-    const history = get<RajalRecordRow[]>(ctx, 'history') ?? [];
+    const cfg = rajalState(ctx).config;
+    const history = rajalState(ctx).history ?? [];
     const matching = recordsIn(ctx, 'matching');
     const flagged = history.filter((row) => !matching.some((m) => m.no_transaksi === row.no_transaksi) && result.summary.includes(row.no_transaksi));
     const rest = history.filter((row) => !matching.some((m) => m.no_transaksi === row.no_transaksi) && !flagged.includes(row));
-    const { from, to } = cfg ? effectiveRange(cfg) : { from: '-', to: '-' };
+    const { from, to } = cfg ? rajalEffectiveRange(cfg) : { from: '-', to: '-' };
     // Per visit, not "n kunjungan lain": in a batch each one is how a patient left the run.
     return { title: `Kunjungan belum bayar ${from} → ${to}, penjamin & poli cocok`, items: [
       ...matching.map((record): ReasoningItem => ({ label: recordLabel(record), ok: true, detail: `${record.nama_penjamin ?? '-'} → ${record.matchedClinic ?? '-'}` })),
@@ -2410,13 +2093,13 @@ const RAJAL_CHECKLISTS: Record<string, ChecklistBuilder> = {
     items: keptDropped(before.matching, recordsIn(ctx, 'matching'), result, 'instalasi Rawat Jalan'),
   }),
   validateTreatment: ({ ctx, result, before }) => {
-    const states = get<RajalTreatmentState[]>(ctx, 'treatments') ?? [];
+    const states = rajalState(ctx).treatments ?? [];
     return { title: 'Daftar tindakan per transaksi', items: keptDropped(before.matching, recordsIn(ctx, 'treatments'), result, '').map((item, index) =>
       item.ok ? { ...item, detail: `${states.find((s) => s.record.no_transaksi === before.matching[index]!.no_transaksi)?.allRows.length ?? 0} tindakan terbaca` } : item) };
   },
   ...Object.fromEntries(Object.entries(PENUNJANG_CHECKS).map(([ref, [kind, applies]]) => [ref, penunjangChecklist(kind, applies)])),
   checkVerification: ({ ctx, result, before }) => {
-    const planByTrx = get<Record<string, string>>(ctx, 'verificationPlanByTrx') ?? {};
+    const planByTrx = rajalState(ctx).verificationPlanByTrx ?? {};
     const planned = new Set((result.proposedMutations ?? []).map((plan) => plan.id));
     return { title: 'Order, transfer & verifikasi sebelum bayar', items: keptDropped(before.payable, recordsIn(ctx, 'payable'), result, 'sudah terverifikasi, tanpa order tertunda').map((item, index): ReasoningItem => {
       const planId = planByTrx[before.payable[index]!.no_transaksi];
@@ -2454,7 +2137,7 @@ const RAJAL_CHECKLISTS: Record<string, ChecklistBuilder> = {
       };
     }) };
   },
-  emitBatchSummary: ({ ctx }) => ({ title: `Ringkasan batch · ${get<number>(ctx, 'batchTotal') ?? 0} pasien · ${ctx.mode === 'write' ? 'write' : 'preview — tidak ada write'}`, items: patientOutcomes(ctx).map((row): ReasoningItem => ({
+  emitBatchSummary: ({ ctx }) => ({ title: `Ringkasan batch · ${rajalState(ctx).batchTotal ?? 0} pasien · ${ctx.mode === 'write' ? 'write' : 'preview — tidak ada write'}`, items: patientOutcomes(ctx).map((row): ReasoningItem => ({
     label: row.patientId,
     ok: row.status === 'lolos',
     detail: row.status === 'lolos' ? `lolos semua cek${row.clinics.length ? ` · ${row.clinics.join(', ')}` : ''}` : `dilewati${row.step ? ` di ${stepLabel(row.step)}` : ''}: ${row.reason}`,
@@ -2464,7 +2147,7 @@ const RAJAL_CHECKLISTS: Record<string, ChecklistBuilder> = {
 /** Outcome of each staged payment of this run, by transaction (write runs). */
 function paymentStatusByTrx(ctx: ExecutorContext): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const id of (ctx.scratch.paymentPlanIds as string[] | undefined) ?? []) {
+  for (const id of rajalState(ctx).paymentPlanIds ?? []) {
     out[id.split(':').pop() ?? id] = ctx.mutations[id]?.status ?? 'planned';
   }
   return out;
@@ -2489,7 +2172,7 @@ const PAYMENT_STATUS_TEXT: Record<string, string> = {
 function withRajalChecklists(registry: ExecutorRegistry): ExecutorRegistry {
   return Object.fromEntries(Object.entries(registry).map(([ref, executor]) => [ref, async (ctx: ExecutorContext) => {
     // The batch summary names the step that dropped each patient (patientOutcomes).
-    ctx.scratch.currentStep = nodeIdOfRef(ref);
+    rajalState(ctx).currentStep = nodeIdOfRef(ref);
     const before = { matching: recordsIn(ctx, 'matching'), treatments: recordsIn(ctx, 'treatments'), payable: recordsIn(ctx, 'payable') };
     const result = await executor(ctx);
     const own = reasoningOf(result.evidence);
@@ -2515,8 +2198,8 @@ const tokenIn = (text: string, token: string) => {
  * whole (config, poli) stay without one.
  */
 function withSubjects(ctx: ExecutorContext, items: readonly ReasoningItem[]): ReasoningItem[] {
-  const records = (get<RajalRecordRow[]>(ctx, 'history') ?? []).filter((record) => record.patientId);
-  const ids = get<string[]>(ctx, 'ids') ?? [];
+  const records = (rajalState(ctx).history ?? []).filter((record) => record.patientId);
+  const ids = rajalState(ctx).ids ?? [];
   const patients = new Set(records.map((record) => record.patientId!));
   const sole = patients.size === 1 ? [...patients][0] : undefined;
   return items.map((item) => {
@@ -2528,25 +2211,4 @@ function withSubjects(ctx: ExecutorContext, items: readonly ReasoningItem[]): Re
   });
 }
 
-/** e-klaim claim index (`getdatapiutang`) for one rajal patient and visit day. */
-function berkasIndexPayload(noRm: string, date: string): Record<string, string> {
-  return {
-    kd_instalasi: '1', kd_kelasperawatan: '', kd_ruangperawatan: '', kd_poli: '', periode: '2',
-    txtperiode1_upld: date, txtperiode2_upld: date, txtnosep_upld: '', kd_penjamin: '',
-    no_sep_kosong_eklaim: 'false', no_sep_tdk_kosong_eklaim: 'false', posting_sudah_eklaim: 'false', posting_belum_eklaim: 'false',
-    no_medicalrecord: noRm, kd_jenis: '', reveral_bpjs: '0', page: '1', rows: '20',
-  };
-}
-
 const rupiahText = (n: number): string => `Rp ${Math.round(Number.isFinite(n) ? n : 0).toLocaleString('id-ID')}`;
-
-function ok(summary: string, extra?: Partial<StepResult>): StepResult {
-  return { status: 'success', summary, ...extra };
-}
-function blocked(summary: string): StepResult {
-  return { status: 'blocked', summary };
-}
-
-
-
-

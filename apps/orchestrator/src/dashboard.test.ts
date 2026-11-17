@@ -5,7 +5,17 @@ import { MemoryLedger } from '@simrs-flow/audit-ledger';
 import { ranapWorkflow } from '@simrs-flow/domain-ranap';
 import { RANAP_HAPPY_INPUT } from '@simrs-flow/test-fixtures';
 import { billingSummary, rupiah, shiftOf, summarizeRun, wibParts } from './dashboard.js';
-import { buildServer } from './server.js';
+import { buildServer, createRunService, type ServerOptions } from './server.js';
+import type { RunService } from './RunService.js';
+import { RuleStore } from './rules.js';
+import type { FastifyInstance } from 'fastify';
+
+/** buildServer with an injected RunService wired exactly as the default one. */
+function serverWithService(options: ServerOptions): { app: FastifyInstance; runService: RunService } {
+  const rules = options.rules ?? new RuleStore();
+  const runService = createRunService(options, rules);
+  return { app: buildServer({ ...options, rules, runService }), runService };
+}
 
 let seq = 0;
 const ev = (type: string, extra: Partial<WorkflowEvent> = {}): WorkflowEvent =>
@@ -100,13 +110,13 @@ describe('dashboard helpers', () => {
 
 describe('dashboard routes', () => {
   it('serve ledger-derived rows, never demo data', async () => {
-    const app = buildServer({ ledger: new MemoryLedger(), qaAuth: { token: 't', operator: 'op' } });
+    const { app, runService: appService } = serverWithService({ ledger: new MemoryLedger(), qaAuth: { token: 't', operator: 'op' } });
     const AUTH = { authorization: 'Bearer t' };
     const empty = (await app.inject({ method: 'GET', url: '/api/patients', headers: AUTH })).json();
     expect(empty).toEqual({ patients: [] });
 
     const created = await app.inject({ method: 'POST', url: '/api/runs', payload: { workflowId: ranapWorkflow.id, mode: 'preview', input: RANAP_HAPPY_INPUT } });
-    await (app as any).runService.waitFor(created.json().runId);
+    await appService.waitFor(created.json().runId);
     const { patients } = (await app.inject({ method: 'GET', url: '/api/patients', headers: AUTH })).json();
     expect(patients).toEqual([expect.objectContaining({ noRm: '0-01-23-45', workflow: 'ranap', nominal: 0, runId: created.json().runId })]);
     const billing = (await app.inject({ method: 'GET', url: '/api/billing/summary', headers: AUTH })).json();

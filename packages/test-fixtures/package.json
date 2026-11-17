@@ -17,6 +17,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@simrs-flow/domain-rajal": "0.1.0",
+    "@simrs-flow/domain-ranap": "0.1.0",
     "@simrs-flow/evomedis-client": "0.1.0",
     "@simrs-flow/workflow-core": "0.1.0"
   }

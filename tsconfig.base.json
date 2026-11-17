@@ -26,9 +26,13 @@
       "@simrs-flow/berkas/evaluate": ["./packages/berkas/src/evaluate.ts"],
       "@simrs-flow/berkas": ["./packages/berkas/src/index.ts"],
       "@simrs-flow/audit-ledger/redaction": ["./packages/audit-ledger/src/redaction.ts"],
+      "@simrs-flow/evomedis-client/endpoints": ["./packages/evomedis-client/src/endpoints.ts"],
       "@simrs-flow/evomedis-client": ["./packages/evomedis-client/src/index.ts"],
+      "@simrs-flow/domain-ranap/contract": ["./packages/domain-ranap/src/contract.ts"],
       "@simrs-flow/domain-ranap": ["./packages/domain-ranap/src/index.ts"],
+      "@simrs-flow/domain-rajal/contract": ["./packages/domain-rajal/src/contract.ts"],
       "@simrs-flow/domain-rajal": ["./packages/domain-rajal/src/index.ts"],
+      "@simrs-flow/api-contract": ["./packages/api-contract/src/index.ts"],
       "@simrs-flow/test-fixtures": ["./packages/test-fixtures/src/index.ts"]
     }
   }

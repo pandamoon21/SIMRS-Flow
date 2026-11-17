@@ -14,6 +14,7 @@
   "dependencies": {
     "@fastify/cors": "^10.1.0",
     "@fastify/static": "^10.1.2",
+    "@simrs-flow/api-contract": "0.1.0",
     "@simrs-flow/audit-ledger": "0.1.0",
     "@simrs-flow/berkas": "0.1.0",
     "@simrs-flow/domain-rajal": "0.1.0",

@@ -7,8 +7,10 @@ import {
   fixedClock,
   verificationRulesOf,
   reasoningOf,
+  recordStepResults,
+  undeclaredOutcomes,
 } from '@simrs-flow/workflow-core';
-import type { Clock, MutationPlan, ReplanDecision, WorkflowEvent } from '@simrs-flow/workflow-core';
+import type { Clock, MutationPlan, RecordedStepResult, ReplanDecision, WorkflowEvent } from '@simrs-flow/workflow-core';
 import type { FixtureEntry } from '@simrs-flow/evomedis-client';
 import {
   ENDPOINTS,
@@ -45,7 +47,13 @@ import {
   RANAP_OBAT_MATCH_DECOY_ORDER,
 } from '@simrs-flow/test-fixtures';
 import { pelaksanaReadBackRule } from './executors.js';
-import { OPT_IN_NODES, ranapWorkflow, createRanapExecutors } from './index.js';
+import { OPT_IN_NODES, ranapWorkflow, createRanapExecutors as createRanapExecutorsUnrecorded } from './index.js';
+import { RANAP_OUTCOMES } from './outcomes.js';
+
+/** Every executor result of every run in this file; the last test checks them against `outcomes.ts`. */
+const recorded: RecordedStepResult[] = [];
+const createRanapExecutors = (deps: Parameters<typeof createRanapExecutorsUnrecorded>[0]) =>
+  recordStepResults(ranapWorkflow, createRanapExecutorsUnrecorded(deps), (r) => recorded.push(r));
 
 function clientFor(overrides: Record<string, FixtureEntry> = {}, mode: 'preview' | 'write' = 'preview') {
   const transport = new FixtureTransport({ ...ranapFixtures, ...overrides });
@@ -3815,5 +3823,14 @@ describe('ranap checklist coverage', () => {
       .filter((node) => !reasoningOf(node.evidence)?.items.length)
       .map((node) => node.id);
     expect(missing).toEqual([]);
+  });
+});
+
+// Last in the file on purpose: it checks what every run above returned.
+describe('ranap declared outcomes', () => {
+  it('cover every status/summary, issue code and planned write the fixture runs produced', (ctx) => {
+    // Nothing recorded means this test was picked alone (`-t`); there is nothing to check.
+    if (recorded.length === 0) ctx.skip();
+    expect(undeclaredOutcomes(RANAP_OUTCOMES, recorded)).toEqual([]);
   });
 });

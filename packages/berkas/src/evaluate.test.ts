@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { berkasFactsOf, evaluateBerkas, pageList, type BerkasPagePort } from './evaluate.js';
+import { berkasFactsOf, berkasIndexPayload, evaluateBerkas, pageList, type BerkasPagePort } from './evaluate.js';
+
+describe('berkas index payload', () => {
+  it('fills the upload-berkas filter for one medrec and period', () => {
+    const payload = berkasIndexPayload({ noRm: '0-12-34-56', from: '2026-01-01', to: '2026-01-05', kdInstalasi: '1' });
+    expect(payload).toMatchObject({ kd_instalasi: '1', txtperiode1_upld: '2026-01-01', txtperiode2_upld: '2026-01-05', no_medicalrecord: '0-12-34-56', rows: '20' });
+  });
+});
 
 const page = (n: number, docTypes: string[], extra: Partial<BerkasPagePort> = {}): BerkasPagePort =>
   ({ page: n, source: 'teks', docTypes, labels: docTypes.map((t) => `L:${t}`), ...extra });

@@ -6,23 +6,27 @@
  * HTTP by:
  *   - subscribing to the run's EventBus and fanning events out to SSE clients,
  *   - persisting every event to the append-only audit ledger (redacted),
- *   - holding gate decisions so the runner can await operator approval.
+ *   - routing gate/plan approvals to the run's `RunApprovals`.
  *
- * Write-mode safety wiring lives here (the engine stays generic):
+ * Write-mode safety wiring is composed here (the engine stays generic):
  *   - #3  the workflow's `mutationAllowlist` is passed into the client,
  *   - #10 a per-transaction lock prevents two write runs racing one record,
- *   - two-person approval is required for `critical`-risk gates,
- *   - #4/#5/#6 an approved mutation is applied only through the mutation gate,
+ *   - two-person approval, auto-approve and the apply path (`runApprovals.ts`);
+ *     #4/#5/#6 an approved mutation is applied only through the mutation gate,
  *     which replays the plan's preconditions immediately before the write and
  *     its read-after-write rules immediately after (see `mutationGate.ts`),
- *   - a real FetchTransport is used only for `source: "live"` runs with
- *     credentials configured; everything else stays fixture-backed.
+ *   - the re-plan barrier around the gate (`replanBarrier.ts`),
+ *   - a real network transport is used only for `source: "live"` runs with
+ *     credentials configured (`simrsAccess.ts`); everything else stays
+ *     fixture-backed,
+ *   - ledger-backed history and its cache rule (`runHistory.ts`).
  *
  * Runs execute in-process. For an MVP this is sufficient and keeps the audit
  * trail authoritative. A future version can move execution to a worker.
  */
 
 import type { BerkasReaderPort } from '@simrs-flow/domain-ranap';
+import type { RunSummary } from '@simrs-flow/api-contract';
 import {
   EventBus,
   WorkflowRunner,
@@ -31,114 +35,32 @@ import {
   applyEvent,
   isTerminalStatus,
   reduceEvents,
-  verificationRulesOf,
   type ExecutionMode,
-  type GateResolver,
-  type MutationOutcomeStatus,
-  type MutationPlan,
-  type ReplanDecision,
-  type ReplanResolver,
   type RunState,
   type WorkflowEvent,
-  type WorkflowNodeDefinition,
 } from '@simrs-flow/workflow-core';
-import { endpointLabel, FetchTransport, type EvoMedisClient } from '@simrs-flow/evomedis-client';
-import type {
-  HistoricalRunStatus,
-  Ledger,
-  LedgerHistory,
-} from '@simrs-flow/audit-ledger';
+import { DEFAULT_CRITICAL_APPROVALS } from '@simrs-flow/evomedis-client';
+import type { Ledger } from '@simrs-flow/audit-ledger';
 import { getWorkflow, type ExecutorFactoryArgs, type WorkflowEntry } from './registry.js';
 import { deriveLockKeys, lockKeyLabel, TransactionLocks } from './locks.js';
-import { applyApprovedMutation, type MutationApplyResult } from './mutationGate.js';
-import { ReloginTransport } from './reloginTransport.js';
 import { QaTransport, qaFixtures, qaFixtureTransport, type QaRunOptions } from './qaTransport.js';
 import type { UserSessionStore } from './sessions.js';
 import { applyRules, type RuleStore } from './rules.js';
+import { ReplanBarrier } from './replanBarrier.js';
+import {
+  httpError,
+  resolveAutoApprove,
+  RunApprovals,
+  type GateApprovalResult,
+  type MutationApprovalResult,
+} from './runApprovals.js';
+import { SimrsAccess, type LiveConfig, type SimrsConnection, type TransportFactory } from './simrsAccess.js';
+import { RunHistory } from './runHistory.js';
+
+export type { MutationApprovalRefusal, MutationApprovalResult } from './runApprovals.js';
+export type { LiveConfig, TransportFactory } from './simrsAccess.js';
 
 type EventSink = (event: WorkflowEvent) => void;
-
-interface GateWaiter {
-  resolve: (decision: { approved: boolean; reason?: string }) => void;
-  /** Distinct operators who have approved this gate so far. */
-  approvals: Set<string>;
-  /** Approvals required before the gate resolves (1, or 2 for critical). */
-  required: number;
-}
-
-/** A node parked after `needsReplan`, waiting for its mutations to settle. */
-interface ReplanWaiter {
-  resolve: (decision: ReplanDecision) => void;
-  /** Plan ids proposed by the pass that asked; all must settle. */
-  planIds: string[];
-}
-
-/** Mutation outcomes that can no longer change — the write is over. */
-const SETTLED_MUTATION: ReadonlySet<MutationOutcomeStatus> = new Set([
-  'verified',
-  'failed',
-  'invalidated',
-]);
-
-/** Events after which a parked re-plan may have become decidable. */
-const MUTATION_SETTLING_EVENTS: ReadonlySet<WorkflowEvent['type']> = new Set([
-  'mutation.applied',
-  'mutation.verified',
-  'mutation.failed',
-  'mutation.invalidated',
-]);
-
-function findProposedPlan(state: RunState, planId: string): MutationPlan | undefined {
-  let found: MutationPlan | undefined;
-  for (const node of Object.values(state.nodes)) {
-    for (const plan of node.proposedMutations) {
-      if (plan.id !== planId) continue;
-      if (found) return undefined;
-      found = plan;
-    }
-  }
-  return found;
-}
-
-function isSettledForReplan(state: RunState, planId: string): boolean {
-  const outcome = state.mutations[planId];
-  if (!outcome) return false;
-  if (SETTLED_MUTATION.has(outcome.status)) return true;
-  if (outcome.status !== 'applied') return false;
-  const plan = findProposedPlan(state, planId);
-  return plan ? verificationRulesOf(plan).length === 0 : false;
-}
-
-/**
- * Should a node that asked for another pass get one *now*?
- *
- * `undefined` means "not yet" — at least one plan is still in flight, so the
- * caller parks and re-asks on the next settling event. A decision is only
- * reached once every plan from that pass has no more gate event to wait for:
- *  - verified / failed / invalidated outcomes are terminal;
- *  - applied is enough only when the plan declared no read-after-write rule, so
- *    there will never be a later verification event for that plan.
- *
- * `applied` remains unverified; this only stops an unobservable write from
- * parking the re-plan barrier forever.
- */
-function replanDecision(state: RunState, planIds: string[]): ReplanDecision | undefined {
-  if (planIds.some((planId) => !isSettledForReplan(state, planId))) {
-    return undefined;
-  }
-  const outcomes = planIds.map((planId) => state.mutations[planId]);
-  const applied = outcomes.filter((outcome) => outcome?.appliedAt !== undefined);
-  if (applied.length === 0) {
-    return {
-      replan: false,
-      reason: `none of the ${planIds.length} proposed mutation(s) were applied, so nothing changed to re-read`,
-    };
-  }
-  return {
-    replan: true,
-    reason: `${applied.length}/${planIds.length} mutation(s) applied — re-reading to plan the follow-up`,
-  };
-}
 
 interface RunHandle {
   runId: string;
@@ -153,29 +75,10 @@ interface RunHandle {
   bus: EventBus;
   controller: AbortController;
   sinks: Set<EventSink>;
-  /** Pending gate approvals keyed by nodeId. */
-  gates: Map<string, GateWaiter>;
-  /** Nodes parked awaiting a re-plan decision, keyed by nodeId. */
-  replans: Map<string, ReplanWaiter>;
-  /** Client used by the mutation gate; write runs only. */
-  client?: EvoMedisClient;
-  /** Distinct operators who have approved each mutation plan, keyed by plan id. */
-  mutationApprovals: Map<string, Set<string>>;
-  /** Plan ids whose apply is in flight (guards against a double submit). */
-  applying: Set<string>;
-  /**
-   * True while `autoApprovePlans` is sweeping. Approving emits events that
-   * re-enter the bus subscriber, so the sweep needs its own latch.
-   */
-  autoApproving?: boolean;
-  /** Plan ids auto-approve has already fired, so a re-entry cannot repeat one. */
-  swept: Set<string>;
-  /**
-   * Auto-approved writes run one at a time per run. Fired in parallel, two
-   * tampung bayar hit the cashier at once and one came back as a backend error
-   * page; sent alone, the same plan landed (live 2026-10-20).
-   */
-  autoQueue: Promise<void>;
+  /** Gate + plan approvals and the auto-approve queue. */
+  approvals: RunApprovals;
+  /** Nodes parked awaiting a re-plan decision. */
+  replans: ReplanBarrier;
   finished: Promise<void>;
   /** Set while paused: the runner parks on it before its next step. */
   pause?: { promise: Promise<void>; resolve: () => void };
@@ -209,29 +112,7 @@ export interface CreateRunInput {
   qa?: QaRunOptions;
 }
 
-/** Live SIMRS connection, resolved from the environment by the entrypoint. */
-export interface LiveConfig {
-  baseUrlV1: string;
-  cookie: string;
-  baseUrlV2?: string;
-}
-
-export interface RunSummary {
-  runId: string;
-  workflowId: string;
-  workflowVersion: string;
-  mode: ExecutionMode;
-  status: RunState['status'] | HistoricalRunStatus;
-  startedAt: string;
-  finishedAt?: string;
-  operator?: string;
-  replayable: boolean;
-  source: 'memory' | 'ledger';
-  reason?: string;
-  truncatedTail?: boolean;
-  /** Set when an audit-ledger append failed; the trail for this run is incomplete. */
-  auditError?: string;
-}
+export type { RunSummary } from '@simrs-flow/api-contract';
 
 export interface RunSubscription {
   historical: boolean;
@@ -255,56 +136,25 @@ export interface RunServiceOptions {
    */
   workflows?: (workflowId: string) => WorkflowEntry | undefined;
   /**
+   * Network transport for live SIMRS calls. Defaults to `FetchTransport`;
+   * tests inject a fixture so the live wiring (re-login, cookies) runs offline.
+   */
+  transportFactory?: TransportFactory;
+  /**
    * Deployment-wide default for {@link CreateRunInput.autoApprove}. Off unless
    * an operator explicitly turns it on for a run or the host sets
    * `AUTO_APPROVE_WRITES=true`.
    */
   autoApproveWrites?: boolean;
   /**
-   * Approvals a `critical` gate/plan needs (two-person rule). Default 2; a
-   * single-operator site sets 1 so verifikasi/tampung bayar stay reachable.
+   * Approvals a `critical` gate/plan needs (two-person rule). Default
+   * `DEFAULT_CRITICAL_APPROVALS` (1, one operator); a two-person site sets 2.
    */
   criticalApprovals?: 1 | 2;
   /** Rules-page values merged into every run's input as defaults. */
   rules?: RuleStore;
   /** Claim bundle reader (Kelengkapan Berkas); handed to live runs only. */
   berkas?: BerkasReaderPort;
-}
-
-/** Outcome of an approval that did not (yet) run the write. */
-export type MutationApprovalRefusal =
-  | 'run_not_found'
-  | 'run_not_active'
-  | 'plan_not_found'
-  | 'preview_run'
-  | 'already_settled'
-  | 'apply_in_flight'
-  | 'client_unavailable';
-
-export type MutationApprovalResult =
-  | { ok: false; error: MutationApprovalRefusal; message: string }
-  /** Recorded, but more approvers are required (two-person rule). */
-  | { ok: true; resolved: false; approvals: string[]; required: number; remaining: number }
-  /** Threshold reached; the gate ran and produced an outcome. */
-  | { ok: true; resolved: true; approvals: string[]; required: number; remaining: 0; outcome: MutationApplyResult };
-
-/** Thrown by createRun for caller-mapped HTTP errors. */
-function httpError(statusCode: number, message: string): Error {
-  return Object.assign(new Error(message), { statusCode });
-}
-
-/** Risk level that demands two-person approval at the gate. */
-function gateApprovalsRequired(node: WorkflowNodeDefinition, critical: number): number {
-  return node.riskLevel === 'critical' ? critical : 1;
-}
-
-/**
- * Approvals a mutation plan needs before it may fire. Mirrors the gate rule
- * (control #22) so applying a `critical` plan cannot be a cheaper path than
- * approving a `critical` gate.
- */
-function planApprovalsRequired(plan: MutationPlan, critical: number): number {
-  return plan.riskLevel === 'critical' ? critical : 1;
 }
 
 /**
@@ -315,30 +165,11 @@ function planApprovalsRequired(plan: MutationPlan, critical: number): number {
  */
 const RETAINED_FINISHED_RUNS = 50;
 
-/**
- * The name recorded as the second approver of a `critical` plan when a run is
- * auto-approved. It is deliberately not a plausible human name: the audit trail
- * must make clear that the second signature was automatic, not a colleague's.
- */
-const AUTO_APPROVER_ID = 'auto-approve';
-
-/** Indonesian names of a settled plan's status, for operator messages. */
-const PLAN_STATUS_ID: Record<string, string> = { applied: 'diterapkan', verified: 'terverifikasi', failed: 'gagal', invalidated: 'dibatalkan' };
-
 export class RunService {
   private runs = new Map<string, RunHandle>();
   /** Finish order of terminal runs still held in memory (oldest first). */
   private retired: string[] = [];
-  /**
-   * Summaries of finished runs read back from the ledger. A terminal run's
-   * file never changes again, so listRuns need not re-read and re-parse every
-   * JSONL file on each dashboard load. Only the small summary is retained —
-   * the events are re-read on demand by getState/subscribe.
-   */
-  private readonly summaryCache = new Map<string, RunSummary>();
   private readonly locks = new TransactionLocks();
-  private readonly live?: LiveConfig;
-  private readonly sessions?: UserSessionStore;
   private readonly retainFinished: number;
   private readonly workflows: (workflowId: string) => WorkflowEntry | undefined;
   /** Host-level default for auto-approving write runs; see `autoApproveWrites`. */
@@ -346,28 +177,39 @@ export class RunService {
   private readonly criticalApprovals: number;
   private readonly rules?: RuleStore;
   private readonly berkas?: BerkasReaderPort;
+  /** Operator session → SIMRS transport; shared with the server's report reads. */
+  readonly simrs: SimrsAccess;
+  /** Ledger-backed run history (summaries + the shared cache rule). */
+  readonly history: RunHistory;
 
   constructor(
     private readonly ledger: Ledger,
     options: RunServiceOptions = {},
   ) {
-    this.live = options.live;
-    this.sessions = options.sessions;
     this.retainFinished = options.retainFinishedRuns ?? RETAINED_FINISHED_RUNS;
     this.workflows = options.workflows ?? getWorkflow;
     this.autoApproveWrites = options.autoApproveWrites ?? false;
-    this.criticalApprovals = options.criticalApprovals ?? 2;
+    this.criticalApprovals = options.criticalApprovals ?? DEFAULT_CRITICAL_APPROVALS;
     this.rules = options.rules;
     this.berkas = options.berkas;
+    this.simrs = new SimrsAccess({
+      ...(options.sessions ? { sessions: options.sessions } : {}),
+      ...(options.live ? { live: options.live } : {}),
+      ...(options.transportFactory ? { transportFactory: options.transportFactory } : {}),
+    });
+    this.history = new RunHistory(ledger, this.workflows, (runId) => this.isLive(runId));
   }
 
   /** Create and immediately start a run. Returns the runId. */
   async createRun(req: CreateRunInput): Promise<{ runId: string }> {
+    const mode: ExecutionMode = req.mode ?? 'preview';
+    // The one place the auto-approve default is decided (400 outside write
+    // mode). Checked first so the API answers exactly as it always has.
+    const autoApprove = resolveAutoApprove(mode, req.autoApprove, this.autoApproveWrites);
     const entry = this.workflows(req.workflowId);
     if (!entry) {
       throw httpError(404, `Unknown workflow "${req.workflowId}"`);
     }
-    const mode: ExecutionMode = req.mode ?? 'preview';
     const source: RunSource = req.source ?? 'fixture';
     if (req.qa?.scenario && source !== 'live') {
       try { qaFixtures(entry.definition.domain === 'rajal' ? 'rajal' : 'ranap', req.qa.scenario); }
@@ -378,29 +220,14 @@ export class RunService {
     if (mode === 'write' && !req.operator) {
       throw httpError(401, 'Write runs require an authenticated operator');
     }
-    // Auto-approval is a write-run convenience only: preview never applies a
-    // mutation, so asking for it there is a caller mistake, not a silent no-op.
-    if (req.autoApprove && mode !== 'write') {
-      throw httpError(400, 'autoApprove is only supported for write runs');
-    }
-    const autoApprove = mode === 'write' && (req.autoApprove === true || this.autoApproveWrites);
 
-    // Resolve the EvoMedis cookie + base URL for live runs. A per-user session
-    // (the logged-in operator's own cookie) takes priority over the shared
-    // service-account env config.
-    const userCookie = this.sessions?.cookieFor(req.sessionToken);
-    const liveBaseUrl = userCookie ? this.sessions?.baseUrlV1 : this.live?.baseUrlV1;
-    const liveBaseUrlV2 = userCookie ? this.sessions?.baseUrlV2 : this.live?.baseUrlV2;
-    const liveCookie = userCookie ?? this.live?.cookie;
-
-    // Live runs need a cookie + base URL; fail closed otherwise.
-    if (source === 'live' && (!liveCookie || !liveBaseUrl)) {
-      throw httpError(
-        400,
-        userCookie === undefined && this.live === undefined
-          ? 'Live source unavailable — log in (per-user) or configure EVOMEDIS_BASE_URL/EVOMEDIS_SESSION_COOKIE'
-          : 'Live source unavailable — EVOMEDIS_BASE_URL not configured',
-      );
+    // Live runs need a cookie + base URL; fail closed otherwise. A per-user
+    // session takes priority over the shared service-account env config.
+    let live: SimrsConnection | undefined;
+    if (source === 'live') {
+      const resolved = this.simrs.connection(req.sessionToken);
+      if (!resolved.ok) throw httpError(400, resolved.message);
+      live = resolved.connection;
     }
 
     const runId = generateRunId();
@@ -417,6 +244,20 @@ export class RunService {
 
     const bus = new EventBus();
     const controller = new AbortController();
+    const state = (): RunState => handle.state;
+    const approvals = new RunApprovals({
+      runId,
+      mode,
+      state,
+      emit: (event) => {
+        bus.emit({ runId, workflowId: req.workflowId, workflowVersion: handle.state.workflowVersion, ...event });
+      },
+      signal: controller.signal,
+      criticalApprovals: this.criticalApprovals,
+      // Write runs always carry an operator (checked above).
+      ...(autoApprove && req.operator ? { autoApproveAs: req.operator } : {}),
+      nodes: new Map(entry.definition.nodes.map((n) => [n.id, n] as const)),
+    });
 
     const handle: RunHandle = {
       runId,
@@ -429,12 +270,8 @@ export class RunService {
       bus,
       controller,
       sinks: new Set(),
-      gates: new Map(),
-      replans: new Map(),
-      mutationApprovals: new Map(),
-      applying: new Set(),
-      swept: new Set(),
-      autoQueue: Promise.resolve(),
+      approvals,
+      replans: new ReplanBarrier({ mode, state, onPark: () => approvals.sweep() }),
       finished: Promise.resolve(),
     };
     this.runs.set(runId, handle);
@@ -483,12 +320,13 @@ export class RunService {
         }
       }
       // A mutation reaching a terminal outcome may release a parked node.
-      if (MUTATION_SETTLING_EVENTS.has(event.type)) this.releaseReplans(handle);
-      // Auto-approve: fire every newly proposed plan as soon as it appears,
-      // attributed to the requesting operator. Plans from a re-plan pass arrive
-      // the same way, so the sweep is re-run rather than only on the first
-      // event. The gate still replays preconditions and verification.
-      if (autoApprove && req.operator) this.autoApprovePlans(handle, req.operator);
+      handle.replans.onEvent(event);
+      // Auto-approve (no-op otherwise): fire every newly proposed plan as soon
+      // as it appears, attributed to the requesting operator. Plans from a
+      // re-plan pass arrive the same way, so the sweep is re-run rather than
+      // only on the first event. The gate still replays preconditions and
+      // verification.
+      handle.approvals.sweep();
     });
 
     // Build the per-run client args: allowlist from the workflow policy, and a
@@ -500,18 +338,14 @@ export class RunService {
     if (req.qa && source !== 'live') {
       factoryArgs.transport = qaFixtureTransport(entry.definition.domain === 'rajal' ? 'rajal' : 'ranap', req.qa);
     }
-    if (source === 'live' && liveCookie && liveBaseUrl) {
-      // QA faults sit inside the re-login wrapper, so a dropped cookie exercises the real recovery.
-      const fetchTransport = req.qa ? new QaTransport(new FetchTransport(), req.qa) : new FetchTransport();
-      // For per-user sessions, wrap the transport so an expired cookie triggers
-      // a silent re-login + retry using the user's retained credentials.
-      factoryArgs.transport =
-        userCookie && this.sessions && req.sessionToken
-          ? new ReloginTransport(fetchTransport, this.sessions, req.sessionToken, this.sessions.cookieName)
-          : fetchTransport;
-      factoryArgs.baseUrlV1 = liveBaseUrl;
-      factoryArgs.cookie = liveCookie;
-      if (liveBaseUrlV2) factoryArgs.baseUrlV2 = liveBaseUrlV2;
+    if (live) {
+      const qa = req.qa;
+      // QA faults sit inside the re-login wrapper, so a dropped cookie exercises
+      // the real recovery. Per-user sessions get the silent re-login + retry.
+      factoryArgs.transport = this.simrs.transportFor(live, qa ? (inner) => new QaTransport(inner, qa) : undefined);
+      factoryArgs.baseUrlV1 = live.baseUrlV1;
+      factoryArgs.cookie = live.cookie;
+      if (live.baseUrlV2) factoryArgs.baseUrlV2 = live.baseUrlV2;
       // The bundle PDF only exists on SIMRS; a fixture run reports the step unavailable.
       if (this.berkas) factoryArgs.berkas = this.berkas;
     }
@@ -524,78 +358,8 @@ export class RunService {
     // one: preview never applies a mutation (and the client would block it
     // anyway — control #1 is unchanged).
     if (mode === 'write') {
-      handle.client = entry.createClient(factoryArgs);
+      approvals.attachClient(entry.createClient(factoryArgs));
     }
-
-    // Map nodeId → risk so the gate resolver knows the approval threshold.
-    const nodeRisk = new Map(entry.definition.nodes.map((n) => [n.id, n] as const));
-
-    const gateResolver: GateResolver = (node) => {
-      // In preview, gates auto-hold (never approve a real write).
-      if (mode === 'preview') {
-        return { approved: false, reason: 'Preview — gate ditahan, tidak ada yang ditulis' };
-      }
-      const def = nodeRisk.get(node.id) ?? node;
-      // Auto-approve: resolve at once. A `critical` gate needs two distinct
-      // approvers, so the synthetic auto-approver is named alongside the real
-      // operator — the audit trail must not read as a two-human sign-off.
-      if (autoApprove) {
-        const approvers = gateApprovalsRequired(def, this.criticalApprovals) > 1 ? `${req.operator}, ${AUTO_APPROVER_ID}` : req.operator;
-        return { approved: true, reason: `Auto-approved by ${approvers} (autoApprove)` };
-      }
-      // In write mode, await external approval(s) via approveGate/rejectGate.
-      // `Promise.withResolvers` needs a newer lib than this project targets.
-      const required = gateApprovalsRequired(def, this.criticalApprovals);
-      return new Promise((resolve) => {
-        handle.gates.set(node.id, { resolve, approvals: new Set(), required });
-      });
-    };
-
-    /**
-     * Re-plan barrier (parity gaps 1 and 2). The legacy script writes inline
-     * and re-reads immediately; plan → approve → apply splits that in two, so
-     * a node whose follow-up work needs backend-assigned state (a new charge
-     * line's `urut_tindakan`) asks for another pass.
-     *
-     * This adds a loop *around* the mutation gate, never a way past it: the
-     * second pass only re-runs the planner. Anything it proposes is a fresh
-     * `MutationPlan` that must be approved again and applied through the gate,
-     * with preconditions replayed, the allowlist enforced and the two-person
-     * rule intact. The runner caps the passes.
-     */
-    const replanResolver: ReplanResolver = (request) => {
-      // Preview never applies anything (control #1), so nothing can have
-      // changed. The runner already refuses to re-plan in preview; this is the
-      // second lock on the same door.
-      if (mode !== 'write') {
-        return { replan: false, reason: 'preview run — no mutation is ever applied' };
-      }
-      const planIds = request.proposedMutations.map((plan) => plan.id);
-      if (planIds.length === 0) {
-        return { replan: false, reason: 'the pass proposed no mutation, so nothing can have changed' };
-      }
-      const now = replanDecision(handle.state, planIds);
-      if (now) return now;
-      // Park until every plan settles. Released by the bus subscriber on each
-      // terminal `mutation.*` event, or by cancel().
-      //
-      // The decision is re-checked *inside* the executor: with auto-approve the
-      // plans can settle between the check above and this `set`, and that
-      // settling event has already been delivered — without the second look the
-      // node would park with nothing left to wake it.
-      return new Promise<ReplanDecision>((resolve) => {
-        const settledNow = replanDecision(handle.state, planIds);
-        if (settledNow) {
-          resolve(settledNow);
-          return;
-        }
-        handle.replans.set(request.node.id, { resolve, planIds });
-        // The plans that parked this node may still be unapproved (e.g. the
-        // node proposed several and only some were swept). Fire them now so the
-        // settling events that release this barrier are actually coming.
-        if (autoApprove && req.operator) this.autoApprovePlans(handle, req.operator);
-      });
-    };
 
     handle.finished = runner
       .run({
@@ -606,8 +370,8 @@ export class RunService {
         enabled: req.enabled,
         signal: controller.signal,
         beforeNode: () => handle.pause?.promise ?? Promise.resolve(),
-        gateResolver,
-        replanResolver,
+        gateResolver: approvals.resolveGate,
+        replanResolver: handle.replans.resolver,
       })
       .then(() => undefined)
       .catch((err) => {
@@ -636,20 +400,6 @@ export class RunService {
   }
 
   /**
-   * Release every parked node whose mutations have all settled. Called after
-   * each terminal `mutation.*` event; nodes still waiting on an in-flight plan
-   * stay parked.
-   */
-  private releaseReplans(handle: RunHandle): void {
-    for (const [nodeId, waiter] of [...handle.replans]) {
-      const decision = replanDecision(handle.state, waiter.planIds);
-      if (!decision) continue;
-      handle.replans.delete(nodeId);
-      waiter.resolve(decision);
-    }
-  }
-
-  /**
    * Drop the oldest finished runs so memory stays bounded on a long-lived
    * server. Evicted runs remain fully readable from the append-only ledger.
    */
@@ -660,45 +410,12 @@ export class RunService {
     }
   }
 
-  private replayProblem(history: LedgerHistory): string | undefined {
-    if (!history.meta || !history.replayable) return history.reason ?? 'historical run is not replayable';
-    const entry = this.workflows(history.meta.workflowId);
-    if (!entry) return `Workflow "${history.meta.workflowId}" is not registered`;
-    if (entry.definition.version !== history.meta.workflowVersion) {
-      return `Workflow version ${history.meta.workflowVersion} is unavailable (current: ${entry.definition.version})`;
-    }
-    return undefined;
-  }
-
-  private historySummary(runId: string, history: LedgerHistory): RunSummary {
-    const meta = history.meta;
-    const replayProblem = this.replayProblem(history);
-    return {
-      runId: meta?.runId ?? runId,
-      workflowId: meta?.workflowId ?? 'unknown',
-      workflowVersion: meta?.workflowVersion ?? 'unknown',
-      mode: meta?.mode ?? 'preview',
-      status: replayProblem && history.status !== 'interrupted' ? 'unreplayable' : history.status,
-      startedAt: meta?.startedAt ?? '',
-      ...(history.finishedAt ? { finishedAt: history.finishedAt } : {}),
-      ...(meta?.operator ? { operator: meta.operator } : {}),
-      replayable: !replayProblem,
-      source: 'ledger',
-      ...(replayProblem ? { reason: replayProblem } : {}),
-      ...(history.truncatedTail ? { truncatedTail: true } : {}),
-    };
-  }
-
-  private async historical(runId: string): Promise<LedgerHistory | undefined> {
-    return this.ledger.readHistory(runId);
-  }
-
   async getState(runId: string): Promise<RunState | undefined> {
     const active = this.runs.get(runId)?.state;
     if (active) return active;
-    const history = await this.historical(runId);
+    const history = await this.history.read(runId);
     if (!history) return undefined;
-    const replayProblem = this.replayProblem(history);
+    const replayProblem = this.history.replayProblem(history);
     if (replayProblem || !history.meta) throw new Error(replayProblem);
     const entry = this.workflows(history.meta.workflowId)!;
     return reduceEvents(entry.definition, runId, history.meta.mode, history.events);
@@ -711,7 +428,7 @@ export class RunService {
   /** True while the run is still live in this process (not yet terminal). */
   isLive(runId: string): boolean {
     const status = this.runs.get(runId)?.state.status;
-    return status !== undefined && !['completed', 'failed', 'cancelled'].includes(status);
+    return status !== undefined && !isTerminalStatus(status);
   }
 
   /** Mode of a run (used by the server to decide whether auth is required). */
@@ -733,23 +450,8 @@ export class RunService {
       source: 'memory',
       ...(handle.ledgerError ? { auditError: handle.ledgerError } : {}),
     }));
-    const activeIds = new Set(active.map((run) => run.runId));
-    const historical = await Promise.all(
-      (await this.ledger.listRuns())
-        .filter((runId) => !activeIds.has(runId))
-        .map(async (runId) => {
-          const cached = this.summaryCache.get(runId);
-          if (cached) return cached;
-          const history = await this.historical(runId);
-          if (!history) return undefined;
-          const summary = this.historySummary(runId, history);
-          // `interrupted` means no terminal event — the file could still be
-          // appended to (e.g. a run owned by another process), so don't cache it.
-          if (history.status !== 'interrupted') this.summaryCache.set(runId, summary);
-          return summary;
-        }),
-    );
-    return [...active, ...historical.filter((run): run is RunSummary => Boolean(run))]
+    const historical = await this.history.listSummaries(new Set(active.map((run) => run.runId)));
+    return [...active, ...historical]
       .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
   }
 
@@ -761,9 +463,9 @@ export class RunService {
       handle.sinks.add(sink);
       return { historical: false, unsubscribe: () => handle.sinks.delete(sink) };
     }
-    const history = await this.historical(runId);
+    const history = await this.history.read(runId);
     if (!history) return undefined;
-    const replayProblem = this.replayProblem(history);
+    const replayProblem = this.history.replayProblem(history);
     if (replayProblem) throw new Error(replayProblem);
     for (const event of history.events) sink(event);
     return { historical: true, unsubscribe: () => undefined };
@@ -815,15 +517,9 @@ export class RunService {
     handle.pause?.resolve();
     handle.pause = undefined;
     // Release any pending gate so the runner unwinds.
-    for (const waiter of handle.gates.values()) {
-      waiter.resolve({ approved: false, reason: 'Run cancelled' });
-    }
-    handle.gates.clear();
+    handle.approvals.cancel();
     // Same for a node parked waiting for its mutations to settle.
-    for (const waiter of handle.replans.values()) {
-      waiter.resolve({ replan: false, reason: 'run cancelled' });
-    }
-    handle.replans.clear();
+    handle.replans.cancel();
     this.locks.release(runId);
     return true;
   }
@@ -833,60 +529,15 @@ export class RunService {
    * first approval is held and the gate resolves only on the second. Returns
    * the outcome so the API can tell the operator whether more is needed.
    */
-  approveGate(
-    runId: string,
-    nodeId: string,
-    operator: string,
-    reason?: string,
-  ): { ok: true; resolved: boolean; remaining: number } | { ok: false } {
+  approveGate(runId: string, nodeId: string, operator: string, reason?: string): GateApprovalResult {
     const handle = this.runs.get(runId);
-    const waiter = handle?.gates.get(nodeId);
-    if (!handle || !waiter) return { ok: false };
-
-    waiter.approvals.add(operator);
-    if (waiter.approvals.size >= waiter.required) {
-      const approvers = [...waiter.approvals].join(', ');
-      waiter.resolve({ approved: true, reason: reason ?? `Approved by ${approvers}` });
-      handle.gates.delete(nodeId);
-      return { ok: true, resolved: true, remaining: 0 };
-    }
-    // Surface partial approval in the audit/event stream.
-    handle.bus.emit({
-      runId,
-      workflowId: handle.workflowId,
-      workflowVersion: handle.state.workflowVersion,
-      type: 'gate.waiting',
-      source: 'api',
-      nodeId,
-      message: `Approval ${waiter.approvals.size}/${waiter.required} by ${operator} — second approver required`,
-    });
-    return { ok: true, resolved: false, remaining: waiter.required - waiter.approvals.size };
-  }
-
-  /** Every plan the run has proposed so far, with the node that proposed it. */
-  private findPlan(
-    handle: RunHandle,
-    planId: string,
-  ): { plan: MutationPlan; nodeId: string } | undefined {
-    for (const node of Object.values(handle.state.nodes)) {
-      for (const plan of node.proposedMutations) {
-        if (plan.id === planId) return { plan, nodeId: node.id };
-      }
-    }
-    return undefined;
+    if (!handle) return { ok: false };
+    return handle.approvals.approveGate(nodeId, operator, reason);
   }
 
   /**
    * Approve a proposed mutation and — once enough distinct operators have
-   * approved — apply it through the mutation gate.
-   *
-   * The gate is the only path that writes: it replays the plan's preconditions
-   * immediately before the call and its read-after-write rules immediately
-   * after (`mutationGate.ts`). Approval alone never writes, and an approval
-   * given minutes ago cannot fire against state that has since changed, because
-   * the reads happen here and now rather than when the plan was built.
-   *
-   * `critical` plans need two distinct approvers, exactly as `critical` gates do.
+   * approved — apply it through the mutation gate (see `RunApprovals`).
    */
   async approveMutation(
     runId: string,
@@ -896,164 +547,21 @@ export class RunService {
   ): Promise<MutationApprovalResult> {
     const handle = this.runs.get(runId);
     if (!handle) return { ok: false, error: 'run_not_found', message: `Unknown run "${runId}"` };
-    // Preview must never write. The client would block it too (control #1);
-    // refusing here keeps the preview path from even reading.
-    if (handle.mode !== 'write') {
-      return { ok: false, error: 'preview_run', message: 'Preview runs never apply mutations' };
-    }
-    if (isTerminalStatus(handle.state.status)) {
-      return {
-        ok: false,
-        error: 'run_not_active',
-        message: `Run ${runId} is ${handle.state.status}; mutations are applied while the run is live`,
-      };
-    }
-    const found = this.findPlan(handle, planId);
-    if (!found) {
-      return { ok: false, error: 'plan_not_found', message: `Run ${runId} proposed no plan "${planId}"` };
-    }
-    // Idempotency (control #11): a plan that already fired must not fire twice.
-    const settled = handle.state.mutations[planId]?.status;
-    if (settled === 'applied' || settled === 'verified' || settled === 'failed' || settled === 'invalidated') {
-      return {
-        ok: false,
-        error: 'already_settled',
-        message: `Rencana ini sudah selesai (${PLAN_STATUS_ID[settled]})`,
-      };
-    }
-    if (handle.applying.has(planId)) {
-      return { ok: false, error: 'apply_in_flight', message: 'Rencana ini sedang diterapkan' };
-    }
-    if (!handle.client) {
-      return { ok: false, error: 'client_unavailable', message: 'No client available for this run' };
-    }
-
-    const approvals = handle.mutationApprovals.get(planId) ?? new Set<string>();
-    approvals.add(operator);
-    handle.mutationApprovals.set(planId, approvals);
-    const required = planApprovalsRequired(found.plan, this.criticalApprovals);
-    if (approvals.size < required) {
-      // Surface the partial approval in the audit/event stream.
-      handle.bus.emit({
-        runId,
-        workflowId: handle.workflowId,
-        workflowVersion: handle.state.workflowVersion,
-        type: 'log.appended',
-        source: 'api',
-        nodeId: found.nodeId,
-        message: `Persetujuan ${approvals.size}/${required} oleh ${operator} untuk ${endpointLabel(found.plan.endpointId)} — butuh operator kedua`,
-        data: { planId, endpointId: found.plan.endpointId },
-      });
-      return {
-        ok: true,
-        resolved: false,
-        approvals: [...approvals],
-        required,
-        remaining: required - approvals.size,
-      };
-    }
-
-    handle.applying.add(planId);
-    try {
-      const outcome = await applyApprovedMutation({
-        plan: found.plan,
-        client: handle.client,
-        approvedBy: [...approvals],
-        signal: handle.controller.signal,
-        ...(reason ? { reason } : {}),
-        emit: (event) =>
-          handle.bus.emit({
-            runId,
-            workflowId: handle.workflowId,
-            workflowVersion: handle.state.workflowVersion,
-            source: 'api',
-            nodeId: found.nodeId,
-            type: event.type,
-            ...(event.severity ? { severity: event.severity } : {}),
-            message: event.message,
-            data: event.data,
-          }),
-      });
-      return { ok: true, resolved: true, approvals: [...approvals], required, remaining: 0, outcome };
-    } finally {
-      handle.applying.delete(planId);
-    }
-  }
-
-  /**
-   * Approve every unsettled plan of an auto-approving run, attributed to
-   * `operator`.
-   *
-   * Called from the bus subscriber, so it must be re-entrancy safe: approving
-   * emits `mutation.*` events that re-enter the subscriber. `handle.autoApproving`
-   * blocks that recursion, and `applying` / the settled-status check in
-   * `approveMutation` make a repeat call harmless.
-   *
-   * A refusal is logged and skipped rather than thrown: one unapprovable plan
-   * (say, a precondition that no longer holds) must not abort the sweep and
-   * strand the rest of the batch.
-   */
-  private autoApprovePlans(handle: RunHandle, operator: string): void {
-    if (handle.autoApproving) return;
-    // Collect first, approve after: `approveMutation` emits events that re-enter
-    // the subscriber synchronously, so a sweep that approved inside the latch
-    // would be re-entered with a state snapshot taken before the plan loop even
-    // finished — which is how the verification plan stayed `planned` forever.
-    const pending: string[] = [];
-    handle.autoApproving = true;
-    try {
-      for (const node of Object.values(handle.state.nodes)) {
-        for (const plan of node.proposedMutations) {
-          if (handle.applying.has(plan.id) || handle.swept.has(plan.id)) continue;
-          const settled = handle.state.mutations[plan.id]?.status;
-          if (settled === 'applied' || settled === 'verified' || settled === 'failed' || settled === 'invalidated') continue;
-          pending.push(plan.id);
-        }
-      }
-      // Claim before the first await: `approveMutation` emits events that
-      // re-enter this sweep synchronously, and without the claim it would fire
-      // the same plan again from inside that re-entry (unbounded).
-      for (const planId of pending) handle.swept.add(planId);
-    } finally {
-      handle.autoApproving = false;
-    }
-    for (const planId of pending) {
-      handle.autoQueue = handle.autoQueue.then(() => this.autoApproveOne(handle, planId, operator)).catch((err: unknown) => {
-        console.error(`[autoApprove] plan ${planId} failed:`, err);
-      });
-    }
-  }
-
-  /**
-   * Approve one plan, meeting the two-person rule for a `critical` plan.
-   *
-   * `approveMutation` counts *distinct* operators, so a critical plan (two
-   * approvals) would sit at 1/2 forever under a single auto-approver. The
-   * second approval is recorded as a distinct synthetic operator, and the audit
-   * trail preserves that: `approvedBy` names both the real operator and the
-   * automatic one, so nobody can mistake this write for a two-human sign-off.
-   */
-  private async autoApproveOne(handle: RunHandle, planId: string, operator: string): Promise<void> {
-    const first = await this.approveMutation(handle.runId, planId, operator, 'Auto-approved (autoApprove)');
-    if (!first.ok || first.resolved) return;
-    const second = await this.approveMutation(
-      handle.runId,
-      planId,
-      AUTO_APPROVER_ID,
-      'Auto-approved (autoApprove, second signature)',
-    );
-    if (!second.ok) {
-      console.error(`[autoApprove] plan ${planId} could not reach its approval threshold:`, second);
-    }
+    return handle.approvals.approveMutation(planId, operator, reason);
   }
 
   rejectGate(runId: string, nodeId: string, operator: string, reason?: string): boolean {
     const handle = this.runs.get(runId);
-    const waiter = handle?.gates.get(nodeId);
-    if (!handle || !waiter) return false;
-    waiter.resolve({ approved: false, reason: reason ?? `Rejected by ${operator}` });
-    handle.gates.delete(nodeId);
-    return true;
+    if (!handle) return false;
+    return handle.approvals.rejectGate(nodeId, operator, reason);
+  }
+
+  /**
+   * Resolves once the run's auto-approve queue has drained (tests await this
+   * instead of sleeping). Resolves at once for an unknown run.
+   */
+  async approvalsIdle(runId: string): Promise<void> {
+    await this.runs.get(runId)?.approvals.idle();
   }
 
   /** Wait for a run to finish (used by tests). */
@@ -1071,4 +579,3 @@ export class RunService {
     return this.ledger.readJsonl(runId);
   }
 }
-

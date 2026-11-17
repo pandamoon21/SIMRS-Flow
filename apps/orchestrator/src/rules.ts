@@ -11,40 +11,16 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { appendFile, mkdir, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import type { RuleSet, RuleValues } from '@simrs-flow/api-contract';
 import type { WorkflowDomain } from '@simrs-flow/workflow-core';
 import { BANK_DARAH_UNIT_KEYWORDS, CATHLAB_UNIT_KEYWORDS, IBS_MANUAL_REVIEW_ROOM_TOKEN } from '@simrs-flow/domain-ranap';
 import {
   RAJAL_DEFAULT_PAYMENT_CONFIG,
   RAJAL_PAYMENT_TYPE_OPTIONS,
   RAJAL_SHIFT_OPTIONS,
-  type RajalPaymentConfig,
-  type RajalTreatmentGroup,
 } from '@simrs-flow/domain-rajal';
 
-export interface RuleValues {
-  ranap: {
-    /** Unit keywords whose unpaid orders block verification until settled by hand. */
-    bankDarahUnits: string[];
-    cathlabUnits: string[];
-    /** Wards whose IBS mismatch is downgraded to a manual review. */
-    ibsManualReviewRooms: string[];
-  };
-  rajal: {
-    /** Same letter is OR, different letters are AND. */
-    treatmentGroups: RajalTreatmentGroup[];
-    /** Presence anywhere on the bill rejects it. */
-    skipTreatments: string[];
-    paymentConfig: RajalPaymentConfig;
-  };
-}
-
-export interface RuleSet {
-  /** 0 = built-in legacy defaults, never saved. */
-  version: number;
-  updatedAt?: string;
-  updatedBy?: string;
-  values: RuleValues;
-}
+export type { RuleSet, RuleValues } from '@simrs-flow/api-contract';
 
 export const DEFAULT_RULE_VALUES: RuleValues = {
   ranap: {

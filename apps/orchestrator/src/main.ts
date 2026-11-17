@@ -5,6 +5,7 @@
  */
 
 import { FileLedger, type Ledger } from '@simrs-flow/audit-ledger';
+import { DEFAULT_CRITICAL_APPROVALS } from '@simrs-flow/evomedis-client';
 import { buildServer } from './server.js';
 import { createBerkasReader } from '@simrs-flow/berkas';
 import { UserSessionStore } from './sessions.js';
@@ -72,7 +73,7 @@ async function main(): Promise<void> {
   const autoApproveWrites = env('AUTO_APPROVE_WRITES', '1') === '1';
 
   // Default matches real use: one operator works the whole patient set (CRITICAL_APPROVALS=2 for two-person sites).
-  const criticalApprovals = env('CRITICAL_APPROVALS', '1') === '2' ? 2 : 1;
+  const criticalApprovals = env('CRITICAL_APPROVALS') === '2' ? 2 : DEFAULT_CRITICAL_APPROVALS;
   // Rules-page values are configuration, not run state: always persisted.
   const rules = new RuleStore(env('RULES_DIR', './.data/rules'));
   // Iur naik kelas: stored snapshot of the doctors' form sheet, re-read once per

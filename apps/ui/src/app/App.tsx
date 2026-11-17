@@ -1,16 +1,19 @@
 /**
- * App owns auth, run orchestration, and the single event projection. Pages only
- * present those contracts through the CoreUI dashboard shell.
+ * App owns auth, navigation and the single event projection. The run on screen
+ * and every command on it live in the run session (../session/runSession.ts);
+ * App mirrors its snapshot and handles the URL, page changes and toasts. Pages
+ * only present those contracts through the CoreUI dashboard shell.
  */
 
-import { lazy, Suspense, useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
-import { ranapWorkflow } from '@simrs-flow/domain-ranap';
-import { rajalWorkflow } from '@simrs-flow/domain-rajal';
-import { mockEventStream, RAJAL_HAPPY_INPUT, RANAP_HAPPY_INPUT } from '@simrs-flow/test-fixtures';
-import { type ExecutionMode, type WorkflowDefinition, type WorkflowEvent } from '@simrs-flow/workflow-core';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
+import { ranapWorkflow } from '@simrs-flow/domain-ranap/contract';
+import { rajalWorkflow } from '@simrs-flow/domain-rajal/contract';
+import type { ExecutionMode, WorkflowDefinition } from '@simrs-flow/workflow-core';
 import type { RunInputResult } from '../features/forms/RunInputForm.js';
 import { useRunStore } from '../store/runStore.js';
 import { api, UnauthorizedError, type RunSummary } from '../api/client.js';
+import { createRunSession } from '../session/createRunSession.js';
+import type { RunCommands, RunSessionHooks, StartedRun } from '../session/runSession.js';
 import { LoginGate } from './LoginGate.js';
 import { DashboardShell, type DashboardPage } from './DashboardShell.js';
 import type { PatientFilter } from '../features/dashboard/RekapPage.js';
@@ -18,6 +21,9 @@ import { RunPage } from '../features/run/RunPage.js';
 import { Card, CardBody, Spinner } from '../ui/primitives.js';
 import { toast, ToastHost } from '../ui/toast.js';
 import { reducedMotion } from '../ui/motion.js';
+
+// Kept importable from here: tests and older callers read them off App.
+export { gateActionError, runLostMessage } from '../session/runSession.js';
 
 const WORKFLOWS: Record<string, WorkflowDefinition> = {
   [ranapWorkflow.id]: ranapWorkflow,
@@ -38,9 +44,6 @@ const ReviewQueue = lazy(() => import('../features/review/ReviewQueue.js').then(
 const RuleCatalogPage = lazy(() => import('../features/rules/RuleCatalogPage.js').then((m) => ({ default: m.RuleCatalogPage })));
 const SettingsHealth = lazy(() => import('../features/settings/SettingsHealth.js').then((m) => ({ default: m.SettingsHealth })));
 
-/** Streamed events are applied in batches this far apart (one render per batch). */
-const EVENT_BATCH_MS = 50;
-
 export function liveStartBlockerOf(source: Source, runInput: RunInputResult): string | undefined {
   if (source !== 'live') return undefined;
   if (runInput.error) return runInput.error;
@@ -48,28 +51,22 @@ export function liveStartBlockerOf(source: Source, runInput: RunInputResult): st
   return undefined;
 }
 
-/** A gate decision that silently fails looks identical to one that was accepted. */
-export function gateActionError(action: 'approve' | 'reject', error: unknown): string {
-  const detail = error instanceof Error ? error.message : String(error);
-  return `Gagal ${action === 'approve' ? 'menyetujui' : 'menolak'} gate: ${detail}`;
-}
-
 /** Old two-page navigation collapsed onto the merged Run route. */
 function normalizePage(page: DashboardPage | 'start'): DashboardPage {
   return page === 'start' ? 'run' : page;
 }
 
-/** A stream error that means the run is gone for good → the operator-facing reason; else undefined. */
-export function runLostMessage(error: string): string | undefined {
-  if (/run_not_found/.test(error)) return 'Run tidak ditemukan lagi di orchestrator (kemungkinan orchestrator restart) — hasil run ini hilang, jalankan ulang.';
-  // The ledger replay of a run that never finished: the orchestrator stopped or restarted mid-run.
-  if (/no terminal event|ended with a partial line/.test(error)) return 'Run terputus — orchestrator berhenti atau dimulai ulang saat run berjalan. Langkah yang sudah tercatat tetap ada di History; jalankan ulang run untuk menyelesaikannya.';
-  if (/gagal setelah beberapa percobaan/.test(error)) return 'Koneksi ke orchestrator putus — status run ini tidak bisa diikuti lagi. Cek orchestrator lalu buka run dari History.';
-  return undefined;
-}
-
 export function shouldShowWelcome(reducedMotion: boolean): boolean {
   return !reducedMotion;
+}
+
+/** A refresh reopens the run through the `?run=` deep link. */
+function rememberRunInUrl(runId: string): void {
+  history.replaceState(null, '', `?run=${encodeURIComponent(runId)}`);
+}
+
+function clearRunFromUrl(): void {
+  if (location.search) history.replaceState(null, '', location.pathname);
 }
 
 export function App() {
@@ -94,33 +91,18 @@ export function App() {
   const [source, setSource] = useState<Source>('offline');
   const [liveError, setLiveError] = useState<string>();
   const [runInput, setRunInput] = useState<RunInputResult>({ summary: 'Input belum lengkap' });
-  const [runId, setRunId] = useState<string>();
   // Write-mode convenience: skip the human gate/plan confirmation for the next
   // run. Never persisted — it must be re-armed deliberately per session.
   const [autoApprove, setAutoApprove] = useState(false);
   const [selectedHistoryRun, setSelectedHistoryRun] = useState<RunSummary>();
-  // True between pressing Start and the run id coming back; blocks a double start.
-  const [starting, setStarting] = useState(false);
   // Bumped on every Start: a fixture replay reuses its run id, yet each start is a new run.
   const [runNonce, setRunNonce] = useState(0);
   const [patientFilter, setPatientFilter] = useState<PatientFilter>('all');
 
-  const loadReplay = useRunStore((store) => store.loadReplay);
   const loadDefinition = useRunStore((store) => store.loadDefinition);
-  const pushEvents = useRunStore((store) => store.pushEvents);
-  const markRunLost = useRunStore((store) => store.markRunLost);
-  const seek = useRunStore((store) => store.seek);
-  const cancelReplay = useRunStore((store) => store.cancelReplay);
-  const cursor = useRunStore((store) => store.cursor);
-  const events = useRunStore((store) => store.events);
-  const playback = useRunStore((store) => store.playback);
   const state = useRunStore((store) => store.state);
-  const unsubRef = useRef<(() => void)>();
   const rulesDirtyRef = useRef(false);
   const onRulesDirty = useCallback((dirty: boolean) => { rulesDirtyRef.current = dirty; }, []);
-  // Client-side fixture replay timer (no server run backs it).
-  const offlineTimerRef = useRef<number>();
-  const [replayPlaying, setReplayPlaying] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -148,178 +130,72 @@ export function App() {
     setLiveError('Sesi berakhir — silakan masuk lagi.');
   }, []);
 
+  // One session for the app's lifetime; its hooks read the latest callbacks.
+  const hooksRef = useRef<RunSessionHooks>({ onError: setLiveError, onUnauthorized });
+  hooksRef.current = { onError: setLiveError, onUnauthorized };
+  const [session] = useState(() => createRunSession({
+    onError: (message) => hooksRef.current.onError(message),
+    onUnauthorized: () => hooksRef.current.onUnauthorized(),
+  }));
+  const run = useSyncExternalStore(session.subscribe, session.getSnapshot);
+  useEffect(() => () => session.dispose(), [session]);
+
   const logout = useCallback(async () => {
-    unsubRef.current?.();
+    session.detach();
     await api.logout();
     setOperator(undefined);
     setEntering(false);
-  }, []);
+  }, [session]);
 
   useEffect(() => {
     loadDefinition(WORKFLOWS[workflowId]!, mode);
   }, [workflowId, mode, loadDefinition]);
 
-  const streamRun = useCallback((id: string) => {
-    unsubRef.current?.();
-    // Opening a finished or reconnected run replays its whole history in one
-    // burst; applying events in ~50 ms batches renders once per batch instead
-    // of once per event (thousands of renders froze office PCs for seconds).
-    let queue: WorkflowEvent[] = [];
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const flush = () => { timer = undefined; const batch = queue; queue = []; pushEvents(batch); };
-    const unsubscribe = api.streamEvents(id, (event) => {
-      queue.push(event);
-      timer ??= setTimeout(flush, EVENT_BATCH_MS);
-    }, (error) => {
-      // Keep order: whatever arrived before the error lands first.
-      if (timer !== undefined) { clearTimeout(timer); flush(); }
-      if (/unauthorized/i.test(error.message)) return onUnauthorized();
-      const lost = runLostMessage(error.message);
-      // Otherwise the projection sits in "Berjalan" forever with nothing behind it.
-      if (lost) markRunLost(lost);
-      setLiveError(lost ?? error.message);
-    });
-    // Leaving this run drops its unapplied tail: the next run has already reset the store.
-    unsubRef.current = () => { unsubscribe(); if (timer !== undefined) clearTimeout(timer); queue = []; };
-  }, [onUnauthorized, pushEvents, markRunLost]);
-
-  // Auto-advance the replay from `fromIndex` up to `total`, storing the timer so
-  // a restart, pause, or cancel can stop it cleanly.
-  const startOfflineTimer = useCallback((fromIndex: number, total: number) => {
-    if (offlineTimerRef.current !== undefined) window.clearInterval(offlineTimerRef.current);
-    let index = fromIndex;
-    setReplayPlaying(true);
-    offlineTimerRef.current = window.setInterval(() => {
-      index += 1;
-      seek(index);
-      if (index >= total) {
-        window.clearInterval(offlineTimerRef.current);
-        offlineTimerRef.current = undefined;
-        setReplayPlaying(false);
-      }
-    }, 120);
-  }, [seek]);
-
-  const pauseReplay = useCallback(() => {
-    if (offlineTimerRef.current !== undefined) window.clearInterval(offlineTimerRef.current);
-    offlineTimerRef.current = undefined;
-    setReplayPlaying(false);
+  /** A run just started: show it, and make a refresh come back to it when the server holds it. */
+  const showStarted = useCallback((started: StartedRun | undefined) => {
+    if (!started) return;
+    setSelectedHistoryRun(undefined);
+    if (started.kind === 'live') rememberRunInUrl(started.runId);
+    setPage('run');
   }, []);
 
-  const playReplay = useCallback(() => {
-    const total = events.length;
-    if (total === 0) return;
-    // At (or past) the end, replay from the start; otherwise continue from here.
-    startOfflineTimer(cursor >= total ? 0 : cursor, total);
-  }, [cursor, events.length, startOfflineTimer]);
-
-  const runOfflineMock = useCallback(() => {
-    const definition = WORKFLOWS[workflowId]!;
-    // The fixture takes the IGD branch so the flexible view shows a path taken and one not taken.
-    const poli = definition.edges.find((edge) => edge.source === 'detect_origin' && edge.target === 'process_poli');
-    const stream = mockEventStream(definition, {
-      runId: `offline-${workflowId}`,
-      exampleReasoning: true,
-      ...(poli ? { branches: { [poli.id]: 'skip' as const }, skip: [poli.target] } : {}),
-    });
-    setRunId(`offline-${workflowId}`);
-    setSelectedHistoryRun(undefined);
-    loadReplay(definition, stream, mode);
-    setPage('run');
-    startOfflineTimer(0, stream.length);
-  }, [loadReplay, mode, startOfflineTimer, workflowId]);
-
-  /**
-   * Data contoh, preview: the real executors on synthetic SIMRS data (the
-   * orchestrator's fixture transport, never SIMRS), so the sample shows what a
-   * live run shows: real log lines, values and reasons, the per-patient view.
-   * The client-side replay stays for write mode and when the orchestrator is unreachable.
-   */
-  const runOffline = useCallback(async () => {
-    if (mode !== 'preview') return runOfflineMock();
-    try {
-      const definition = await api.getWorkflow(workflowId);
-      const { runId: id } = await api.createRun({ workflowId, mode: 'preview', input: definition.domain === 'rajal' ? RAJAL_HAPPY_INPUT : RANAP_HAPPY_INPUT, source: 'fixture' });
-      loadDefinition(definition, 'preview');
-      setRunId(id);
-      setSelectedHistoryRun(undefined);
-      history.replaceState(null, '', `?run=${encodeURIComponent(id)}`);
-      setPage('run');
-      streamRun(id);
-    } catch (error) {
-      if (error instanceof UnauthorizedError) return onUnauthorized();
-      runOfflineMock();
+  const start = useCallback(() => {
+    if (run.starting) return;
+    setRunNonce((n) => n + 1);
+    if (source === 'offline') {
+      void session.startSample(WORKFLOWS[workflowId]!, mode).then(showStarted);
+      return;
     }
-  }, [loadDefinition, mode, onUnauthorized, runOfflineMock, streamRun, workflowId]);
-
-  const runLive = useCallback(async () => {
     setLiveError(undefined);
     const blocker = liveStartBlockerOf('live', runInput);
     if (blocker) {
       setLiveError(blocker);
       return;
     }
-    setStarting(true);
-    try {
-      const definition = await api.getWorkflow(workflowId);
-      loadDefinition(definition, mode);
-      const { runId: id } = await api.createRun({
-        workflowId,
-        mode,
-        input: runInput.input,
-        enabled: runInput.enabled,
-        source: 'live',
-        // Only meaningful on a write run; preview refuses it server-side.
-        ...(mode === 'write' && autoApprove ? { autoApprove: true } : {}),
-      });
-      setRunId(id);
-      setSelectedHistoryRun(undefined);
-      // A refresh reopens the run through the `?run=` deep link below.
-      history.replaceState(null, '', `?run=${encodeURIComponent(id)}`);
-      setPage('run');
-      streamRun(id);
-      toast('info', `Run dimulai · ${id}`);
-    } catch (error) {
-      if (error instanceof UnauthorizedError) return onUnauthorized();
-      setLiveError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setStarting(false);
-    }
-  }, [autoApprove, loadDefinition, mode, onUnauthorized, runInput, streamRun, workflowId]);
+    void session.startLive({ workflowId, mode, input: runInput.input, enabled: runInput.enabled, autoApprove }).then((started) => {
+      showStarted(started);
+      if (started) toast('info', `Run dimulai · ${started.runId}`);
+    });
+  }, [autoApprove, mode, run.starting, runInput, session, showStarted, source, workflowId]);
 
-  const start = useCallback(() => {
-    if (starting) return;
-    setRunNonce((n) => n + 1);
-    if (source === 'offline') void runOffline();
-    else void runLive();
-  }, [runLive, runOffline, source, starting]);
-
-
-  const openHistoryRun = useCallback(async (run: RunSummary) => {
+  const openHistoryRun = useCallback(async (summary: RunSummary) => {
     setLiveError(undefined);
-    try {
-      const definition = await api.getWorkflow(run.workflowId);
-      setWorkflowId(run.workflowId);
-      setMode(run.mode);
-      setRunId(run.runId);
-      history.replaceState(null, '', `?run=${encodeURIComponent(run.runId)}`);
-      setSelectedHistoryRun(run);
-      loadDefinition(definition, run.mode);
-      setPage('run');
-      streamRun(run.runId);
-    } catch (error) {
-      if (error instanceof UnauthorizedError) return onUnauthorized();
-      setLiveError(error instanceof Error ? error.message : String(error));
-    }
-  }, [loadDefinition, onUnauthorized, streamRun]);
+    const definition = await session.openRun(summary);
+    if (!definition) return;
+    setWorkflowId(summary.workflowId);
+    setMode(summary.mode);
+    rememberRunInUrl(summary.runId);
+    setSelectedHistoryRun(summary);
+    setPage('run');
+  }, [session]);
 
   // Deep link: `?run=<id>` reopens a run the orchestrator still tracks (or its ledger replay).
   useEffect(() => {
     const id = new URLSearchParams(location.search).get('run');
     if (!id) return;
     void api.listRuns().then(({ runs }) => {
-      const run = runs.find((r) => r.runId === id);
-      if (run) void openHistoryRun(run);
+      const found = runs.find((r) => r.runId === id);
+      if (found) void openHistoryRun(found);
       else setLiveError(`Run ${id} tidak ditemukan`);
     }).catch((error) => { if (error instanceof UnauthorizedError) onUnauthorized(); });
     // Runs once on mount only.
@@ -331,13 +207,12 @@ export function App() {
     if (rulesDirtyRef.current && normalized !== 'rules' && !window.confirm('Perubahan rule belum disimpan. Tinggalkan halaman ini?')) return;
     rulesDirtyRef.current = false;
     if (normalized !== 'run') {
-      unsubRef.current?.();
-      unsubRef.current = undefined;
-      if (location.search) history.replaceState(null, '', location.pathname);
+      session.detach();
+      clearRunFromUrl();
     }
     setLiveError(undefined);
     setPage(normalized);
-  }, []);
+  }, [session]);
 
   /**
    * Changing workflow or mode in Setup reloads a pristine definition, so the
@@ -345,87 +220,45 @@ export function App() {
    * keeps naming a run that is gone. Setup is locked while a run is live.
    */
   const forgetRun = useCallback(() => {
-    pauseReplay();
-    unsubRef.current?.();
-    unsubRef.current = undefined;
-    setRunId(undefined);
+    session.forget();
     setSelectedHistoryRun(undefined);
-    if (location.search) history.replaceState(null, '', location.pathname);
-  }, [pauseReplay]);
+    clearRunFromUrl();
+  }, [session]);
 
-  const cancel = useCallback(() => {
-    if (!runId) return;
-    // Fixture replays run entirely client-side — there is no server run to cancel,
-    // so hitting /cancel would 404. Just stop the local replay timer instead.
-    if (runId.startsWith('offline-')) {
-      pauseReplay();
-      cancelReplay();
-      return;
-    }
-    void api.cancel(runId).catch((error: unknown) => setLiveError(error instanceof Error ? error.message : String(error)));
-  }, [runId]);
-
-  const pauseRun = useCallback(() => {
-    if (!runId) return;
-    if (runId.startsWith('offline-')) return pauseReplay();
-    void api.pause(runId).catch((error: unknown) => setLiveError(error instanceof Error ? error.message : String(error)));
-  }, [pauseReplay, runId]);
-  const resumeRun = useCallback(() => {
-    if (!runId) return;
-    if (runId.startsWith('offline-')) return playReplay();
-    void api.resume(runId).catch((error: unknown) => setLiveError(error instanceof Error ? error.message : String(error)));
-  }, [playReplay, runId]);
-
-  // Decision handlers resolve once the server answers, so the inspector can hold a
+  // Decisions resolve once the server answers, so the inspector can hold a
   // pending state until then; outcomes surface as toasts and errors as liveError.
-  const approveGate = useCallback(async (nodeId: string) => {
-    if (!runId) return;
-    setLiveError(undefined);
-    try {
-      await api.approveGate(runId, nodeId, 'approved via UI');
-      toast('success', 'Gate disetujui');
-    } catch (error) {
-      setLiveError(gateActionError('approve', error));
-    }
-  }, [runId]);
-  const rejectGate = useCallback(async (nodeId: string) => {
-    if (!runId) return;
-    setLiveError(undefined);
-    try {
-      await api.rejectGate(runId, nodeId, 'rejected via UI');
-      toast('warning', 'Gate ditolak');
-    } catch (error) {
-      setLiveError(gateActionError('reject', error));
-    }
-  }, [runId]);
-  /**
-   * A mutation plan sits in `planned` state until every required operator
-   * approves it. Without this bridge the UI showed the plan but had no way to
-   * fire the write, so a "confirmed write" run would stall silently — the
-   * exact symptom for RM 0-90-00-08.
-   */
-  const approveMutation = useCallback(async (planId: string) => {
-    if (!runId) return;
-    setLiveError(undefined);
-    try {
-      await api.approveMutation(runId, planId, 'approved via UI');
-      toast('success', 'Mutasi disetujui · menunggu verifikasi');
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      setLiveError(`Gagal menyetujui mutasi: ${detail}`);
-    }
-  }, [runId]);
+  const commands = useMemo<RunCommands>(() => ({
+    cancel: () => session.cancel(),
+    pause: () => session.pause(),
+    resume: () => session.resume(),
+    seek: (cursor) => session.seek(cursor),
+    playReplay: () => session.playReplay(),
+    pauseReplay: () => session.pauseReplay(),
+    approveGate: async (nodeId) => {
+      setLiveError(undefined);
+      const ok = await session.approveGate(nodeId);
+      if (ok) toast('success', 'Gate disetujui');
+      return ok;
+    },
+    rejectGate: async (nodeId) => {
+      setLiveError(undefined);
+      const ok = await session.rejectGate(nodeId);
+      if (ok) toast('warning', 'Gate ditolak');
+      return ok;
+    },
+    approveMutation: async (planId) => {
+      setLiveError(undefined);
+      const ok = await session.approveMutation(planId);
+      if (ok) toast('success', 'Mutasi disetujui · menunggu verifikasi');
+      return ok;
+    },
+  }), [session]);
 
   // Errors raised while another page is open (e.g. opening a run from History)
   // would otherwise sit unseen on the Run page.
   useEffect(() => {
     if (liveError && page !== 'run') toast('danger', liveError);
   }, [liveError, page]);
-
-  useEffect(() => () => {
-    unsubRef.current?.();
-    if (offlineTimerRef.current !== undefined) window.clearInterval(offlineTimerRef.current);
-  }, []);
 
   if (!authChecked) {
     return <div className="login-shell"><Card className="login-card" role="status"><CardBody className="page-loading"><Spinner size="sm" /> Memuat sesi…</CardBody></Card></div>;
@@ -438,6 +271,7 @@ export function App() {
       ? 'Confirmed write butuh sumber "Live SIMRS" — fixture replay tidak menjalankan script maupun menulis apa pun.'
       : undefined);
 
+  const runId = run.runId;
   const hasRunContext = Boolean(runId && state);
   // Only ledger replays are history; an in-memory run opened from History is still live and stoppable.
   const historical = selectedHistoryRun?.source === 'ledger';
@@ -466,7 +300,7 @@ export function App() {
       onLogout={() => void logout()}
     >
       <Suspense fallback={<div className="page-loading" role="status"><Spinner size="sm" /> Memuat halaman…</div>}>
-      {page === 'home' ? <DashboardHome onNavigate={changePage} onOpenRun={(run) => void openHistoryRun(run)} onOpenPatients={(f) => { setPatientFilter(f); changePage('rekap'); }} onUnauthorized={onUnauthorized} /> : null}
+      {page === 'home' ? <DashboardHome onNavigate={changePage} onOpenRun={(r) => void openHistoryRun(r)} onOpenPatients={(f) => { setPatientFilter(f); changePage('rekap'); }} onUnauthorized={onUnauthorized} /> : null}
       {page === 'run' ? (
         <RunPage
           workflows={Object.values(WORKFLOWS)}
@@ -486,42 +320,28 @@ export function App() {
           onSourceChange={setSource}
           onInputChange={setRunInput}
           onStart={start}
-          hasRunContext={hasRunContext}
-          runId={runId}
-          runNonce={runNonce}
-          state={state}
-          liveError={liveError}
-          historical={historical}
-          starting={starting}
-          onOpenHistory={() => changePage('history')}
-          onDismissError={() => setLiveError(undefined)}
           autoApprove={autoApprove}
           onAutoApproveChange={setAutoApprove}
-          playback={playback}
-          cursor={cursor}
-          eventCount={events.length}
-          onCancel={cancel}
-          onPause={pauseRun}
-          onResume={resumeRun}
-          onApproveGate={approveGate}
-          onRejectGate={rejectGate}
-          onApproveMutation={approveMutation}
-          onSeek={seek}
-          replayPlaying={replayPlaying}
-          onPlayReplay={playReplay}
-          onPauseReplay={pauseReplay}
+          run={run}
+          runNonce={runNonce}
+          commands={commands}
+          hasRunContext={hasRunContext}
+          historical={historical}
+          liveError={liveError}
+          onOpenHistory={() => changePage('history')}
+          onDismissError={() => setLiveError(undefined)}
         />
       ) : null}
       {page === 'rekap' ? <RekapPage onUnauthorized={onUnauthorized} initialFilter={patientFilter} /> : null}
       {page === 'naik-kelas' ? <NaikKelasPage onUnauthorized={onUnauthorized} /> : null}
-      {page === 'history' ? <RunHistory onOpenRun={(run) => void openHistoryRun(run)} onUnauthorized={onUnauthorized} workflowLabels={WORKFLOW_LABELS} /> : null}
+      {page === 'history' ? <RunHistory onOpenRun={(r) => void openHistoryRun(r)} onUnauthorized={onUnauthorized} workflowLabels={WORKFLOW_LABELS} /> : null}
       {page === 'review' ? (
         <ReviewQueue
           state={state}
           runId={runId}
           hasReviewContext={hasReviewContext}
-          onApproveGate={approveGate}
-          onRejectGate={rejectGate}
+          onApproveGate={(nodeId) => void commands.approveGate(nodeId)}
+          onRejectGate={(nodeId) => void commands.rejectGate(nodeId)}
           onOpenRun={() => changePage('run')}
         />
       ) : null}

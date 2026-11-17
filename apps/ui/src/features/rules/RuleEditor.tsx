@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { BANK_DARAH_UNIT_KEYWORDS, CATHLAB_UNIT_KEYWORDS, IBS_MANUAL_REVIEW_ROOM_TOKEN } from '@simrs-flow/domain-ranap';
-import { RAJAL_DEFAULT_PAYMENT_CONFIG, RAJAL_PAYMENT_TYPE_OPTIONS, RAJAL_SHIFT_OPTIONS } from '@simrs-flow/domain-rajal';
+import { BANK_DARAH_UNIT_KEYWORDS, CATHLAB_UNIT_KEYWORDS, IBS_MANUAL_REVIEW_ROOM_TOKEN } from '@simrs-flow/domain-ranap/contract';
+import { RAJAL_DEFAULT_PAYMENT_CONFIG, RAJAL_PAYMENT_TYPE_OPTIONS, RAJAL_SHIFT_OPTIONS } from '@simrs-flow/domain-rajal/contract';
 import { api, UnauthorizedError, type RuleSet, type RuleValues } from '../../api/client.js';
 import { Alert, Badge, Button, Card, CardBody, FormInput, FormLabel, FormSelect, FormTextarea, Spinner } from '../../ui/primitives.js';
 import { toast } from '../../ui/toast.js';

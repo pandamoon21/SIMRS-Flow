@@ -75,6 +75,16 @@ export function runProvenanceLabel(run: RunSummary): string {
   return run.source === 'ledger' ? 'Riwayat tersimpan' : 'In-memory run';
 }
 
+/** Badge text + tooltip when the run's audit trail is incomplete (a ledger append failed); else undefined. */
+export function auditErrorBadge(run: Pick<RunSummary, 'auditError'>): { label: string; title: string } | undefined {
+  return run.auditError ? { label: 'Audit tidak lengkap', title: `Jejak audit run ini tidak lengkap: ${run.auditError}` } : undefined;
+}
+
+export function AuditErrorBadge({ run }: { run: Pick<RunSummary, 'auditError'> }) {
+  const audit = auditErrorBadge(run);
+  return audit ? <span title={audit.title}><Badge color="danger">{audit.label}</Badge></span> : null;
+}
+
 /** A disabled control has to say why; "Open" is disabled whenever a run has no replayable log. */
 export function openRunTitle(replayable: boolean): string {
   return replayable ? 'Buka di kanvas' : 'Run ini tidak punya log event yang bisa diputar ulang';
@@ -217,6 +227,7 @@ export function RunHistory({ onOpenRun, onUnauthorized, workflowLabels = {} }: R
                       <TableDataCell>
                         <Badge color={runStatusColor(run)}>{runStatusLabel(run)}</Badge>
                         {needsAttention(run) ? <span className="history-attention">Perlu perhatian</span> : null}
+                        <AuditErrorBadge run={run} />
                         {run.reason ? <div className="history-reason">{run.reason}</div> : null}
                       </TableDataCell>
                       <TableDataCell className="mono">{runDuration(run)}</TableDataCell>

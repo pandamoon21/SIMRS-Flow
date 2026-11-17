@@ -36,7 +36,7 @@
  */
 
 import type { LegacyRow } from './types.js';
-import { upper } from './types.js';
+import { str, upper } from './types.js';
 import { clampToleranceDays, datePart, parseDateFlexible, parseDateTimeFlexible } from './dates.js';
 import {
   isIgdHemodialysisName,
@@ -465,4 +465,267 @@ function inferOriginFromHistoryForGroup(args: DetectGroupOriginArgs): InferredOr
 function admissionRank(row: LegacyRow): number {
   const dt = parseDateTimeFlexible(row['tgl_masuk']);
   return dt === null ? Number.POSITIVE_INFINITY : dt.getTime();
+}
+
+// ── choose origin: the decision half of the source finders ────────────────
+//
+// `_find_related_igd_source_for_group` (ranap_v3.py:13804) and
+// `_find_related_poli_source` (ranap_v3.py:13932) interleave HTTP reads with
+// scoring. The executors keep the reads (and their exact order: the IGD sweeps
+// stop at the first sweep that yields a candidate, and an accepted IGD
+// transaction is not read twice); everything they decide from those reads is
+// here.
+
+/** A scored source candidate — the Python's `(score_tuple, row)` pair. */
+export interface ScoredOriginCandidate {
+  score: readonly (number | string)[];
+  row: LegacyRow;
+}
+
+/**
+ * `candidates.sort(key=score, reverse=True)[0]` — the best candidate on the
+ * Python's tuple, or `undefined` for none. Equal scores keep discovery order
+ * (both sorts are stable).
+ */
+export function chooseOrigin(candidates: readonly ScoredOriginCandidate[]): LegacyRow | undefined {
+  if (candidates.length === 0) return undefined;
+  return [...candidates].sort((a, b) => compareScoreDesc(a.score, b.score))[0]?.row;
+}
+
+/** What one inpatient group offers an IGD candidate to match against. */
+export interface IgdOriginTarget {
+  transaksiInap: ReadonlySet<string>;
+  registrasiInap: ReadonlySet<string>;
+  targetSepKeys: ReadonlySet<string>;
+  /** The SEP/reference date; `null` disables the tolerance window. */
+  targetDt: Date | null;
+  /** Clamped to 0..7. */
+  tolerance: number;
+}
+
+export function buildIgdOriginTarget(args: {
+  noRm: string;
+  roomRows: readonly LegacyRow[];
+  tanggal: string;
+  toleranceDays: number;
+  dataKunjunganByTrx: Readonly<Record<string, LegacyRow>>;
+}): IgdOriginTarget {
+  return {
+    transaksiInap: new Set(args.roomRows.map((row) => str(row, 'no_transaksi')).filter(Boolean)),
+    registrasiInap: new Set(args.roomRows.map((row) => str(row, 'no_registrasikunjungan')).filter(Boolean)),
+    targetSepKeys: new Set(extractSepKeysFromRoomRows(args.roomRows, args.noRm, args.dataKunjunganByTrx)),
+    targetDt: parseDateFlexible(args.tanggal),
+    tolerance: clampToleranceDays(args.toleranceDays),
+  };
+}
+
+/** The reads for one IGD candidate (`parentIgd` reached through `rowReg`). */
+export interface IgdCandidateFacts {
+  parentIgd: string;
+  rowReg: string;
+  /** The elektromedik charge that pointed at this IGD visit; `''` for history rows. */
+  sourceNoTransaksi: string;
+  sourceDt: Date | null;
+  /** `poliklinik.getDataTransaksi` for `rowReg` — where this visit's bill points. */
+  linked: LegacyRow | undefined;
+  /** `poliklinik.getDataKunjungan`, else `penatajasaInap.getDataKunjungan`. */
+  sourceRow: LegacyRow | undefined;
+  signal: IgdSourceSignal;
+}
+
+/**
+ * Accept and score one IGD candidate, or reject it (`undefined`).
+ *
+ * A candidate has to be *linked* — its registration's transaction points back at
+ * one of this group's transactions or registrations (vacuously true when the
+ * group has no transaction) — or carry a SJP/SEP this group also carries;
+ * anything else is a different episode. With both dates readable it must also
+ * sit within tolerance of the reference date (either side; unlike POLI, an IGD
+ * visit is not rejected for postdating it). Score, most important first:
+ * linked → SEP → came through elektromedik → hemodialysis → same day →
+ * smaller gap → larger `no_transaksi`.
+ */
+export function scoreIgdOriginCandidate(
+  facts: IgdCandidateFacts,
+  target: IgdOriginTarget,
+): ScoredOriginCandidate | undefined {
+  const linkedTrx = str(facts.linked, 'no_transaksi');
+  const linkedReg = str(facts.linked, 'no_registrasikunjungan');
+  const linkedMatch =
+    target.transaksiInap.size === 0 || target.transaksiInap.has(linkedTrx) || target.registrasiInap.has(linkedReg);
+  const sourceSep = str(facts.sourceRow, 'no_sjp', 'no_sep');
+  const sepMatch = target.targetSepKeys.size > 0 && Boolean(sourceSep) && target.targetSepKeys.has(sourceSep);
+  if (!linkedMatch && !sepMatch) return undefined;
+
+  let diffDays = 999;
+  if (target.targetDt && facts.sourceDt) {
+    diffDays = Math.abs(calendarDiffDays(facts.sourceDt, target.targetDt));
+    if (diffDays > target.tolerance) return undefined;
+  }
+
+  const { parentIgd, signal, sourceRow } = facts;
+  return {
+    score: [
+      linkedMatch ? 1 : 0,
+      sepMatch ? 1 : 0,
+      facts.sourceNoTransaksi ? 1 : 0,
+      signal.hasHemodialisaSignal ? 1 : 0,
+      diffDays === 0 ? 1 : 0,
+      -diffDays,
+      parentIgd,
+    ],
+    row: {
+      no_transaksi: parentIgd,
+      no_registrasikunjungan: facts.rowReg,
+      source_no_transaksi: facts.sourceNoTransaksi,
+      linked_inap_trx: linkedTrx,
+      linked_inap_reg: linkedReg,
+      source_sep: sourceSep,
+      kd_unit: str(sourceRow, 'kd_unit'),
+      kd_detkelpenjamin: str(sourceRow, 'kd_detkelpenjamin'),
+      nama_unit: str(sourceRow, 'nama_unit'),
+      tgl_masuk: str(sourceRow, 'tgl_masuk'),
+      has_hemodialisa_signal: signal.hasHemodialisaSignal,
+      matched_names: [...signal.matchedNames],
+      detail: sourceRow ?? {},
+    },
+  };
+}
+
+/** What one inpatient stay offers a POLI candidate to match against. */
+export interface PoliOriginTarget {
+  noTransaksiInap: string;
+  registrasiInap: string;
+  /** `nama_rujukanasal`, uppercased. */
+  originText: string;
+  originKey: string;
+  /** Reference date (`YYYY-MM-DD`), and its parsed form. */
+  tglRef: string;
+  tglRefDt: Date | null;
+  kdParamedisInap: string;
+  targetSepKeys: ReadonlySet<string>;
+  tolerance: number;
+}
+
+export function buildPoliOriginTarget(args: {
+  noRm: string;
+  kunjunganInap: LegacyRow;
+  /** `penatajasaInap.getDataKunjungan` for the inpatient transaction (`{}` when unread). */
+  dataInap: LegacyRow;
+  tanggal: string;
+  toleranceDays: number;
+}): PoliOriginTarget {
+  const originText = upper(args.dataInap, 'nama_rujukanasal');
+  const tglRef = datePart(
+    args.tanggal || str(args.dataInap, 'tgl_masuk') || str(args.kunjunganInap, 'tgl_masuk'),
+  );
+  return {
+    noTransaksiInap: str(args.kunjunganInap, 'no_transaksi'),
+    registrasiInap: str(args.kunjunganInap, 'no_registrasikunjungan'),
+    originText,
+    originKey: normalizeTextKey(originText),
+    tglRef,
+    tglRefDt: parseDateFlexible(tglRef),
+    kdParamedisInap: str(args.dataInap, 'kd_paramedis'),
+    targetSepKeys: new Set(extractSepKeysFromRoomRows([args.kunjunganInap], args.noRm, {})),
+    tolerance: clampToleranceDays(args.toleranceDays),
+  };
+}
+
+/** A POLI history row that passed the pre-read filter. */
+export interface PoliCandidateWindow {
+  noTransaksiPoli: string;
+  noRegPoli: string;
+  rowDate: string;
+  /** Signed day offset to the reference date (`<= 0`), or `999` when unreadable. */
+  diffDays: number;
+}
+
+/**
+ * The pre-read filter: only `01-` clinic visits with a registration, on or
+ * before the reference date and inside the tolerance (a clinic visit *after*
+ * the admission cannot be its source, which is why the Python drops a positive
+ * `diff_days`). Runs before any HTTP read for the row.
+ */
+export function poliOriginCandidateWindow(row: LegacyRow, target: PoliOriginTarget): PoliCandidateWindow | undefined {
+  const noTransaksiPoli = str(row, 'no_transaksi');
+  const noRegPoli = str(row, 'no_registrasikunjungan');
+  if (!noTransaksiPoli.startsWith('01-') || !noRegPoli) return undefined;
+
+  const rowDate = datePart(str(row, 'tgl_masuk'));
+  const rowDt = parseDateFlexible(rowDate);
+  let diffDays = 999;
+  if (target.tglRefDt && rowDt) {
+    const signed = calendarDiffDays(rowDt, target.tglRefDt);
+    // A clinic visit dated after the admission is not its source.
+    if (signed > 0 || Math.abs(signed) > target.tolerance) return undefined;
+    diffDays = signed;
+  }
+  return { noTransaksiPoli, noRegPoli, rowDate, diffDays };
+}
+
+/**
+ * Accept and score one POLI candidate, or reject it (`undefined`).
+ *
+ * It has to be linked back to this stay, or match on SEP, on the referral unit
+ * named in `nama_rujukanasal`, or on the doctor — the Python's `fallback_match`
+ * disjunction. Score: linked → SEP → unit → doctor → consult → same day →
+ * smaller gap → later date.
+ *
+ * @param linked `poliklinik.getDataTransaksi` for the candidate's registration.
+ * @param detail `poliklinik.getDataKunjungan` for the candidate (`{}` when unread).
+ */
+export function scorePoliOriginCandidate(
+  row: LegacyRow,
+  window: PoliCandidateWindow,
+  linked: LegacyRow | undefined,
+  detail: LegacyRow,
+  target: PoliOriginTarget,
+): ScoredOriginCandidate | undefined {
+  const { noTransaksiPoli, noRegPoli, rowDate, diffDays } = window;
+  const linkedTrx = str(linked, 'no_transaksi');
+  const linkedReg = str(linked, 'no_registrasikunjungan');
+  const kdParamedisPoli = str(detail, 'kd_paramedis');
+  const sourceSep = str(detail, 'no_sjp', 'no_sep');
+  const namaUnitPoli = str(detail, 'nama_unit') || str(row, 'nama_unit');
+  const unitKey = normalizeTextKey(namaUnitPoli);
+  const { originKey } = target;
+  const linkedMatch =
+    (Boolean(linkedTrx) && linkedTrx === target.noTransaksiInap) ||
+    (Boolean(linkedReg) && linkedReg === target.registrasiInap);
+  const doctorMatch = Boolean(target.kdParamedisInap) && kdParamedisPoli === target.kdParamedisInap;
+  const consultMatch = target.originText.includes('KONSULTASI');
+  const unitMatch =
+    Boolean(unitKey) && Boolean(originKey) && (originKey.includes(unitKey) || unitKey.includes(originKey));
+  const sepMatch = target.targetSepKeys.size > 0 && Boolean(sourceSep) && target.targetSepKeys.has(sourceSep);
+  const exactDate = rowDate === target.tglRef;
+  const fallbackMatch =
+    sepMatch || unitMatch || (consultMatch && doctorMatch) || (doctorMatch && exactDate);
+  if (!linkedMatch && !fallbackMatch) return undefined;
+
+  return {
+    score: [
+      linkedMatch ? 1 : 0,
+      sepMatch ? 1 : 0,
+      unitMatch ? 1 : 0,
+      doctorMatch ? 1 : 0,
+      consultMatch ? 1 : 0,
+      exactDate ? 1 : 0,
+      -Math.abs(diffDays),
+      rowDate,
+    ],
+    row: {
+      no_transaksi: noTransaksiPoli,
+      no_registrasikunjungan: noRegPoli,
+      nama_unit: str(row, 'nama_unit'),
+      tgl_masuk: rowDate,
+      kd_unit: str(detail, 'kd_unit') || str(row, 'kd_unit'),
+      kd_paramedis: kdParamedisPoli,
+      kd_detkelpenjamin: str(detail, 'kd_detkelpenjamin') || str(linked, 'kd_detkelpenjamin'),
+      linked_inap_trx: linkedTrx,
+      linked_inap_reg: linkedReg,
+      source_sep: sourceSep,
+      detail,
+    },
+  };
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RunSummary } from './api/client.js';
-import { filterRuns, isPreviewGateStop, needsAttention, runStatusLabel, openRunTitle, relativeTime, runDuration, runProvenanceLabel, splitRuns } from './features/history/RunHistory.js';
+import { auditErrorBadge, filterRuns, isPreviewGateStop, needsAttention, runStatusLabel, openRunTitle, relativeTime, runDuration, runProvenanceLabel, splitRuns } from './features/history/RunHistory.js';
 import { isNodeActivationKey } from './features/canvas/WorkflowNode.js';
 
 // Keep the UI's keyboard and provenance contracts pure so they can be checked without a browser.
@@ -96,5 +96,14 @@ describe('preview gate stop in run lists', () => {
     expect(isPreviewGateStop(realFailure)).toBe(false);
     expect(needsAttention(realFailure)).toBe(true);
     expect(isPreviewGateStop({ ...held, mode: 'write' as const })).toBe(false);
+  });
+});
+
+describe('audit error badge', () => {
+  it('flags a run whose ledger append failed, and only that run', () => {
+    expect(auditErrorBadge(run('completed'))).toBeUndefined();
+    const badge = auditErrorBadge({ ...run('completed'), auditError: 'EACCES' });
+    expect(badge?.label).toBe('Audit tidak lengkap');
+    expect(badge?.title).toContain('EACCES');
   });
 });

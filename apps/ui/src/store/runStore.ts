@@ -11,6 +11,7 @@ import { create } from 'zustand';
 import {
   initialRunState,
   applyEvent,
+  isTerminalStatus,
   type ExecutionMode,
   type RunState,
   type WorkflowDefinition,
@@ -60,6 +61,25 @@ function project(def: WorkflowDefinition, runId: string, mode: ExecutionMode, ev
     s = applyEvent(s, events[i]!);
   }
   return s;
+}
+
+/**
+ * A client-made terminal event that continues `last`'s run: the store ends a
+ * run itself when no server event ever will (lost run, cancelled fixture replay).
+ */
+function syntheticTerminal(last: WorkflowEvent, type: 'run.failed' | 'run.cancelled', suffix: string, ts: string, message: string): WorkflowEvent {
+  return {
+    schema: last.schema,
+    eventId: `${last.eventId}-${suffix}`,
+    seq: last.seq + 1,
+    ts,
+    runId: last.runId,
+    workflowId: last.workflowId,
+    workflowVersion: last.workflowVersion,
+    type,
+    source: last.source,
+    message,
+  };
 }
 
 export const useRunStore = create<RunStoreState>((set, get) => ({
@@ -116,19 +136,8 @@ export const useRunStore = create<RunStoreState>((set, get) => ({
   markRunLost: (message) => {
     const { definition, events, state } = get();
     const last = events.at(-1);
-    if (!definition || !last || !state || ['completed', 'failed', 'cancelled'].includes(state.status)) return;
-    const lost: WorkflowEvent = {
-      schema: last.schema,
-      eventId: `${last.eventId}-lost`,
-      seq: last.seq + 1,
-      ts: new Date().toISOString(),
-      runId: last.runId,
-      workflowId: last.workflowId,
-      workflowVersion: last.workflowVersion,
-      type: 'run.failed',
-      source: last.source,
-      message,
-    };
+    if (!definition || !last || !state || isTerminalStatus(state.status)) return;
+    const lost = syntheticTerminal(last, 'run.failed', 'lost', new Date().toISOString(), message);
     set({ state: applyEvent(state, lost), events: [...events, lost], cursor: events.length + 1 });
   },
 
@@ -139,19 +148,8 @@ export const useRunStore = create<RunStoreState>((set, get) => ({
     if (!definition || !last) return;
     // A fixture replay has no server run to cancel, so the projection would sit
     // in "running" forever; end it the way a live stream does, with run.cancelled.
-    const cancelled: WorkflowEvent = {
-      schema: last.schema,
-      eventId: `${last.eventId}-cancel`,
-      seq: last.seq + 1,
-      // Fixture timestamps are synthetic; stay on their clock so durations stay sane.
-      ts: new Date(Date.parse(last.ts) + 1).toISOString(),
-      runId: last.runId,
-      workflowId: last.workflowId,
-      workflowVersion: last.workflowVersion,
-      type: 'run.cancelled',
-      source: last.source,
-      message: 'Dihentikan operator',
-    };
+    // Fixture timestamps are synthetic; stay on their clock so durations stay sane.
+    const cancelled = syntheticTerminal(last, 'run.cancelled', 'cancel', new Date(Date.parse(last.ts) + 1).toISOString(), 'Dihentikan operator');
     const next = [...kept, cancelled];
     set({ events: next, cursor: next.length, state: project(definition, last.runId, state?.mode ?? 'preview', next, next.length) });
   },

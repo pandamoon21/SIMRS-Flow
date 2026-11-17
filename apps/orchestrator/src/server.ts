@@ -45,10 +45,9 @@ import { hostname, networkInterfaces } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { accessUrls, dirStats, fileStats, safeUrl } from './config.js';
 import { FileLedger, type Ledger } from '@simrs-flow/audit-ledger';
-import { EvoMedisClient, FetchTransport, LoginFailedError } from '@simrs-flow/evomedis-client';
+import { DEFAULT_CRITICAL_APPROVALS, LoginFailedError } from '@simrs-flow/evomedis-client';
 import { fetchRajalUnpaidBatch } from '@simrs-flow/domain-rajal';
 import { buildRanapDischargeQuery, parseRanapDischargeReport, type RanapReportFlag } from '@simrs-flow/domain-ranap';
-import { ReloginTransport } from './reloginTransport.js';
 import { NaikKelasStore, sheetCsvExportUrl } from './naikKelas.js';
 import { billingSummary, summarizeRun, type RunDashboardPart } from './dashboard.js';
 import type { WorkflowEvent } from '@simrs-flow/workflow-core';
@@ -105,6 +104,25 @@ export interface ServerOptions {
   about?: HostAbout;
   /** Team sticky notes (JSON). Unset = memory only (tests). */
   notesFile?: string;
+  /**
+   * Prebuilt run service (tests inject one to drive it directly). Default:
+   * built from these options by {@link createRunService}. When supplied, the
+   * run-related options above (live, sessions, autoApproveWrites,
+   * criticalApprovals, berkas) are the caller's to wire into it.
+   */
+  runService?: RunService;
+}
+
+/** The RunService `buildServer` builds by default, from the same options. */
+export function createRunService(options: ServerOptions, rules: RuleStore): RunService {
+  return new RunService(options.ledger, {
+    rules,
+    live: options.live,
+    sessions: options.sessions,
+    autoApproveWrites: options.autoApproveWrites ?? false,
+    criticalApprovals: options.criticalApprovals,
+    ...(options.berkas ? { berkas: options.berkas } : {}),
+  });
 }
 
 export interface HostAbout {
@@ -125,14 +143,7 @@ export function buildServer(options: ServerOptions): FastifyInstance {
   const sessions = options.sessions;
   const qaAuth = options.qaAuth;
   const rules = options.rules ?? new RuleStore();
-  const service = new RunService(options.ledger, {
-    rules,
-    live: options.live,
-    sessions,
-    autoApproveWrites: options.autoApproveWrites ?? false,
-    criticalApprovals: options.criticalApprovals,
-    ...(options.berkas ? { berkas: options.berkas } : {}),
-  });
+  const service = options.runService ?? createRunService(options, rules);
 
   void app.register(cors, {
     origin: options.corsOrigins ?? true,
@@ -276,25 +287,15 @@ export function buildServer(options: ServerOptions): FastifyInstance {
     }
   });
 
-  // Dashboard reads, derived from the audit ledger (see dashboard.ts). A
-  // finished run's file never changes, so its part is computed once; the
-  // naik kelas list is part of the key because it changes the category.
-  const dashboardCache = new Map<string, { naikKelasAt: string; part: RunDashboardPart }>();
+  // Dashboard reads, derived from the audit ledger (see dashboard.ts). Cached
+  // by the same rule as the runs list (runHistory.ts); the naik kelas list is
+  // the key because it changes the category.
+  const dashboardCache = service.history.projection<RunDashboardPart>({ tolerateReadErrors: true });
   const dashboardParts = async (): Promise<RunDashboardPart[]> => {
     const snapshot = naikKelas.status().snapshot;
     const naikKelasAt = snapshot?.fetchedAt ?? '';
     const naikKelasRm = new Set((snapshot?.rows ?? []).map((row) => row.noRm));
-    const parts = await Promise.all((await options.ledger.listRuns()).map(async (runId) => {
-      const cached = dashboardCache.get(runId);
-      if (cached && cached.naikKelasAt === naikKelasAt) return cached.part;
-      const history = await options.ledger.readHistory(runId).catch(() => undefined);
-      if (!history) return undefined;
-      const live = service.isLive(runId);
-      const part = summarizeRun(history, naikKelasRm, live);
-      if (!live && history.status !== 'interrupted') dashboardCache.set(runId, { naikKelasAt, part });
-      return part;
-    }));
-    return parts.filter((part): part is RunDashboardPart => Boolean(part));
+    return dashboardCache.readAll(naikKelasAt, (history, live) => summarizeRun(history, naikKelasRm, live));
   };
 
   app.get('/api/billing/summary', async (req, reply) => {
@@ -418,15 +419,9 @@ export function buildServer(options: ServerOptions): FastifyInstance {
   const liveReadClient = (req: FastifyRequest, reply: { code: (status: number) => { send: (body: unknown) => unknown } }) => {
     const operator = readOperatorOf(req);
     if (!operator) { reply.code(401).send({ error: 'operator_auth_required' }); return undefined; }
-    const cookie = sessions?.cookieFor(operator.token);
-    if (!sessions || !cookie) { reply.code(409).send({ error: 'live_session_required' }); return undefined; }
-    return new EvoMedisClient(
-      { baseUrlV1: sessions.baseUrlV1, baseUrlV2: sessions.baseUrlV2, cookieName: sessions.cookieName, cookie },
-      {
-        mode: 'preview',
-        transport: new ReloginTransport(new FetchTransport(), sessions, operator.token, sessions.cookieName),
-      },
-    );
+    const client = service.simrs.userReadClient(operator.token);
+    if (!client) { reply.code(409).send({ error: 'live_session_required' }); return undefined; }
+    return client;
   };
   const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -556,23 +551,23 @@ export function buildServer(options: ServerOptions): FastifyInstance {
       sessionToken = op?.token;
     }
 
-    // `autoApprove` skips the human confirmation for a write run's gates and
-    // plans. It is only meaningful (and only accepted) on an authenticated
-    // write run; everything else — allowlist, preconditions, read-after-write
-    // verification — still runs.
-    const autoApprove = body.mode === 'write' && body.autoApprove === true;
-    if (body.autoApprove === true && body.mode !== 'write') {
-      return reply.code(400).send({ error: 'autoApprove_requires_write_mode' });
-    }
-
     try {
       // `qa` (fixture scenarios, latency, faults) is honoured on a QA host only.
+      // `autoApprove` (skip the human click on a write run's gates and plans;
+      // allowlist, preconditions and verification still run) is decided by
+      // RunService alone — only a literal `true` asks for it.
       const { qa, ...rest } = body;
-      const { runId } = await service.createRun({ ...rest, autoApprove, operator, sessionToken, ...(qaAuth && qa ? { qa } : {}) });
+      const { runId } = await service.createRun({
+        ...rest,
+        autoApprove: body.autoApprove === true,
+        operator,
+        sessionToken,
+        ...(qaAuth && qa ? { qa } : {}),
+      });
       return reply.code(201).send({ runId });
     } catch (err) {
-      const statusCode = (err as { statusCode?: number }).statusCode ?? 500;
-      return reply.code(statusCode).send({ error: (err as Error).message });
+      const { statusCode = 500, apiError } = err as { statusCode?: number; apiError?: string };
+      return reply.code(statusCode).send({ error: apiError ?? (err as Error).message });
     }
   });
 
@@ -719,7 +714,6 @@ export function buildServer(options: ServerOptions): FastifyInstance {
   });
 
   // Expose internals for tests.
-  (app as unknown as { runService: RunService }).runService = service;
   if (sessions) (app as unknown as { sessions: UserSessionStore }).sessions = sessions;
   return app;
 }
@@ -755,7 +749,8 @@ function hostDetails(options: ServerOptions) {
       notes: options.notesFile ? fileStats(resolve(options.notesFile)) : undefined,
     },
     policy: {
-      criticalApprovals: options.criticalApprovals ?? 2,
+      // Same resolution as RunService, so the health page shows what is enforced.
+      criticalApprovals: options.criticalApprovals ?? DEFAULT_CRITICAL_APPROVALS,
       autoApproveWrites: options.autoApproveWrites ?? false,
       qaLogin: Boolean(options.qaAuth),
     },

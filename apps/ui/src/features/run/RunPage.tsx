@@ -1,12 +1,12 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { ReactFlowProvider } from 'reactflow';
-import type { ExecutionMode, RunState, WorkflowDefinition } from '@simrs-flow/workflow-core';
+import { isTerminalStatus, type ExecutionMode, type WorkflowDefinition } from '@simrs-flow/workflow-core';
 import { RunInputForm, type RunInputResult } from '../forms/RunInputForm.js';
 import { RunSpinner, RunTrack, glyphStateOf, trackProgressOf, variantOf } from './RunStatusGlyph.js';
 import { WorkflowCanvas } from '../canvas/WorkflowCanvas.js';
 import { NodeInspector } from '../panels/NodeInspector.js';
 import { RunConsole } from '../panels/RunConsole.js';
-import { berkasProgressOf, cancelButtonLabel, currentNodeOf, attentionOf, PREVIEW_GATE_LABEL, previewGateStopOf, RUN_STATUS_LABEL, TERMINAL_RUN_STATUSES } from './runStatus.js';
+import { berkasProgressOf, cancelButtonLabel, currentNodeOf, attentionOf, PREVIEW_GATE_LABEL, previewGateStopOf, RUN_STATUS_LABEL } from './runStatus.js';
 import { RunSummary } from './RunSummary.js';
 import { RunLogView } from './RunLogView.js';
 import { useRunStore } from '../../store/runStore.js';
@@ -16,7 +16,7 @@ import { pageZoom } from '../../ui/fitZoom.js';
 import { RESIZE_CURSOR, RESIZE_DIRS, resizeRectWithin, type ResizeDir } from './panelResize.js';
 import { clampSummaryRect, placeSummary, summaryBottomReserve, summaryResizeBounds, SUMMARY_MIN_SIZE, type SummaryRect } from './summaryPlacement.js';
 import type { Source } from '../../app/App.js';
-import type { PlaybackMode } from '../../store/runStore.js';
+import type { RunCommands, RunSessionSnapshot } from '../../session/runSession.js';
 import { Alert, Badge, Button, ButtonGroup, FormCheck } from '../../ui/primitives.js';
 import { clampPanelLayout, defaultPanelLayout, PANEL_LAYOUT_KEY, PANEL_MIN, parsePanelLayout, type PanelLayout, type PanelName, type PanelViewport } from './panelLayout.js';
 
@@ -130,32 +130,18 @@ export interface RunPageProps {
   /** Write-mode only: skip the human gate/plan confirmation for this run. */
   autoApprove: boolean;
   onAutoApproveChange: (value: boolean) => void;
-  // live
-  hasRunContext: boolean;
-  runId?: string;
+  // run (projection state is read from the run store)
+  /** The run session's view: run id, live vs replay, replay timer, start in flight. */
+  run: RunSessionSnapshot;
   /** Changes on every Start, even when a fixture replay keeps its run id. */
   runNonce?: number;
-  state?: RunState;
-  liveError?: string;
+  /** Cancel / pause / resume / decisions / replay controls for the run on screen. */
+  commands: RunCommands;
+  hasRunContext: boolean;
   historical: boolean;
-  playback: PlaybackMode;
-  cursor: number;
-  eventCount: number;
-  /** Start pressed and the run id has not come back yet. */
-  starting?: boolean;
+  liveError?: string;
   onOpenHistory: () => void;
   onDismissError: () => void;
-  onCancel: () => void;
-  /** Pause before the next step / continue a paused run (a fixture replay pauses its timer). */
-  onPause: () => void;
-  onResume: () => void;
-  onApproveGate: (nodeId: string) => void | Promise<void>;
-  onRejectGate: (nodeId: string) => void | Promise<void>;
-  onApproveMutation: (planId: string) => void | Promise<void>;
-  onSeek: (cursor: number) => void;
-  replayPlaying: boolean;
-  onPlayReplay: () => void;
-  onPauseReplay: () => void;
 }
 
 export function RunPage(props: RunPageProps) {
@@ -163,12 +149,22 @@ export function RunPage(props: RunPageProps) {
     workflows, workflowId, mode, source, runInput, startBlocker,
     onWorkflowChange, onModeChange, onSourceChange, onInputChange, onStart,
     autoApprove, onAutoApproveChange,
-    hasRunContext, runId, runNonce = 0, state, liveError, historical,
-    playback, cursor, eventCount,
-    onCancel, onPause, onResume, onApproveGate, onRejectGate, onApproveMutation, onSeek,
-    replayPlaying, onPlayReplay, onPauseReplay,
-    starting = false, onOpenHistory, onDismissError,
+    run, runNonce = 0, commands, hasRunContext, historical, liveError,
+    onOpenHistory, onDismissError,
   } = props;
+  const { runId, replayPlaying, starting } = run;
+  const state = useRunStore((store) => store.state);
+  const playback = useRunStore((store) => store.playback);
+  const cursor = useRunStore((store) => store.cursor);
+  const eventCount = useRunStore((store) => store.events.length);
+  const {
+    cancel: onCancel, pause: onPause, resume: onResume, seek: onSeek,
+    playReplay: onPlayReplay, pauseReplay: onPauseReplay,
+  } = commands;
+  // Panels expect fire-and-forget handlers; the session reports failures itself.
+  const onApproveGate = useCallback((nodeId: string) => commands.approveGate(nodeId).then(() => undefined), [commands]);
+  const onRejectGate = useCallback((nodeId: string) => commands.rejectGate(nodeId).then(() => undefined), [commands]);
+  const onApproveMutation = useCallback((planId: string) => commands.approveMutation(planId).then(() => undefined), [commands]);
   const selectNode = useRunStore((store) => store.selectNode);
 
   const workflow = workflows.find((item) => item.id === workflowId) ?? workflows[0]!;
@@ -421,7 +417,7 @@ export function RunPage(props: RunPageProps) {
   );
 
   // A fixture replay never reaches 'paused' in state; its timer is the pause.
-  const runPaused = runId?.startsWith('offline-') ? !replayPlaying : state?.status === 'paused';
+  const runPaused = run.kind === 'replay' ? !replayPlaying : state?.status === 'paused';
   const pauseButton = (size: 'sm' | 'lg') => (
     <Button color="secondary" variant={runPaused ? undefined : 'outline'} size={size} type="button" disabled={!runStoppable || stopping}
       title={runPaused ? 'Lanjutkan dari step berikutnya' : 'Jeda sebelum step berikutnya — step yang sedang berjalan diselesaikan dulu; bisa dilanjutkan'}
@@ -448,7 +444,7 @@ export function RunPage(props: RunPageProps) {
     if (currentNode?.status === 'gate_waiting' && mode !== 'preview') toast('warning', `Gate menunggu persetujuan · ${labelOf(attentionNodeId)}`);
     // focusNode/labelOf are stable in effect: keyed by run + node id only.
   }, [attentionNodeId, historical, runId]);
-  const terminal = Boolean(actualStatus && TERMINAL_RUN_STATUSES.includes(actualStatus));
+  const terminal = Boolean(actualStatus && isTerminalStatus(actualStatus));
   // A new spinner and traveller per run: re-rolled on every Start and on a run opened from History.
   const [variantSeed, setVariantSeed] = useState(() => Math.random());
   useEffect(() => setVariantSeed(Math.random()), [runId, runNonce]);
@@ -486,7 +482,7 @@ export function RunPage(props: RunPageProps) {
       <p>
         <strong>Ganti ke {switchTarget}?</strong>
         Hasil run <span className="mono">{runId}</span> akan ditutup dari kanvas{view === 'canvas' ? ' & console' : ''}.
-        {runId?.startsWith('offline-') ? ' Replay fixture tidak disimpan.' : ' Run tetap tersimpan dan bisa dibuka lagi dari History.'}
+        {run.kind === 'replay' ? ' Replay fixture tidak disimpan.' : ' Run tetap tersimpan dan bisa dibuka lagi dari History.'}
       </p>
       <div className="switch-confirm-actions">
         <Button color="warning" size="sm" type="button" onClick={confirmSwitch} autoFocus>Ya, ganti</Button>
@@ -651,7 +647,7 @@ export function RunPage(props: RunPageProps) {
                 </ReactFlowProvider>
               )}
               {summaryEnabled && terminal && state && runId ? (
-                <RunSummary state={state} runId={runId} labelOf={labelOf} onFocusNode={focusNode} onOpenHistory={onOpenHistory}
+                <RunSummary state={state} runId={runId} fixture={run.kind === 'replay'} labelOf={labelOf} onFocusNode={focusNode} onOpenHistory={onOpenHistory}
                   onNewRun={bringSetupForward} style={summaryStyle} sectionRef={summaryRef}
                   grips={<div className="run-summary-grips"><PanelGrip label="Ringkasan" onResize={resizeSummary} /></div>} />
               ) : null}

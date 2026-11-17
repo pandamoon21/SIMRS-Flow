@@ -48,15 +48,17 @@ Concrete data flow for one preview run:
 
 | Path | Purpose |
 | --- | --- |
-| `apps/ui/src/` | React app: `app/App.tsx` shell (no router, local page state), `store/runStore.ts` (Zustand projection), `api/client.ts` (REST + SSE), `features/{canvas,panels,run,history,review,dashboard,settings}/` (presentational), `ui/primitives.tsx` |
-| `apps/orchestrator/src/` | Fastify API: `main.ts` (wiring), `server.ts` (routes), `RunService.ts` (orchestration core), `registry.ts` (`WORKFLOWS`), `mutationGate.ts`, `locks.ts`, `sessions.ts`, `auth.ts`, `reloginTransport.ts`, `config.ts`, `rules.ts` (rule catalog serving), `naikKelas.ts` (IUR naik kelas logic) |
+| `apps/ui/src/` | React app: `app/App.tsx` shell (no router, local page state), `session/runSession.ts` (pure-TS run session: start/stream/replay/commands via a live or fixture-replay adapter; fixtures load by dynamic `import()` only), `store/runStore.ts` (Zustand projection), `api/client.ts` (REST + SSE), `features/{canvas,panels,run,history,review,dashboard,settings}/` (presentational), `ui/primitives.tsx` |
+| `apps/orchestrator/src/` | Fastify API: `main.ts` (wiring), `server.ts` (routes), `RunService.ts` (orchestration core, composes `runApprovals.ts` gate/plan approvals + auto-approve queue, `replanBarrier.ts`, `simrsAccess.ts` session→transport, `runHistory.ts` ledger summaries + cache rule), `registry.ts` (`WORKFLOWS`), `mutationGate.ts`, `locks.ts`, `sessions.ts`, `auth.ts`, `reloginTransport.ts`, `config.ts`, `rules.ts` (rule catalog serving), `naikKelas.ts` (IUR naik kelas logic) |
 | `packages/workflow-core/src/` | Framework-agnostic engine: `types.ts` (single source of truth for all contracts), `runner.ts`, `reducer.ts`, `eventBus.ts`, `definition.ts`, `expectations.ts`, `jsonl.ts`, `ids.ts`, `reasoning.ts` |
-| `packages/domain-*/src/ruleCatalog.generated.ts` | **Generated — do not hand-edit.** Rebuilt by `scripts/gen-rule-catalog.ts`; `ruleCatalog.test.ts` fails when the committed file is stale |
+| `packages/domain-*/src/outcomes.ts` | Declared outcomes per node (status + summary template, issue codes, findings, planned writes, reads). `ruleCatalog.ts` builds the Rules page catalog from them (`buildRuleCatalog`, workflow-core `outcomes.ts`). The last test in `domain-*.test.ts` records every executor result of every fixture run and fails on any status/summary, issue code or planned write a node does not declare |
 | `packages/evomedis-client/src/` | Typed safety-gated SIMRS client: `client.ts`, `endpoints.ts` (registry + `isMutating`), `errors.ts`, `session.ts`, `transport.ts` (`FetchTransport`, `FixtureTransport`), `parsers.ts` |
 | `packages/domain-ranap/src/` | Inpatient workflow (`workflow.ts`), I/O shell (`executors.ts`, very large), pure decision rules in `logic/*.ts` (co-located `*.test.ts`) |
 | `packages/domain-rajal/src/` | Outpatient batch workflow + `legacyConfig.ts` (ported verdicts/config) |
 | `packages/audit-ledger/src/` | `ledger.ts` (`Ledger`, `FileLedger`, `MemoryLedger`), `redaction.ts` (isomorphic subpath export), `history.ts` (JSONL replay validation) |
 | `packages/test-fixtures/src/` | Synthetic EvoMedis fixtures (`ranap.ts`, `rajal.ts`) + `mockEvents.ts` (`mockEventStream`) |
+| `packages/domain-*/src/contract.ts` | Light subpath `@simrs-flow/domain-{ranap,rajal}/contract`: run-input builders (`input.ts`), node ids + next-action advice + evidence readers (`nodes.ts`), workflow, rule catalog. The UI and dashboard import domains only through it, never `executors.ts` |
+| `packages/api-contract/src/` | Type-only orchestrator ↔ UI wire contract (`RunSummary`, `RuleValues`/`RuleSet`, `CreateRunRequest`, `RanapDischargeRow`) |
 | `scripts/` | Dev/pilot/QA helpers, invoked directly (not npm scripts) — see below |
 | `docs/` | Architecture, API catalog, risk register, runbook, parity specs against legacy code |
 
@@ -89,11 +91,7 @@ npx vitest run --coverage
 
 Windows helpers — `run.bat` wraps everything (`install|dev|ui|api|typecheck|lint|test|test:watch|livetest|build|start|clean|free-port`), auto-installs deps and loads `.env`; `run.bat build` additionally deletes emitted `.js`/`.d.ts` next to source (they would otherwise shadow `.ts` under Vitest/tsx).
 
-Regenerate the rule catalog after editing any executor (`executors.ts`); the domain test fails until you do:
-
-```bash
-node --import tsx scripts/gen-rule-catalog.ts
-```
+When an executor change adds, removes or rewords a step outcome (status/summary, issue code, planned write), update that node in `packages/domain-*/src/outcomes.ts` in the same change; the domain test's "declared outcomes" check fails until you do. `…` in a template stands for a runtime value.
 
 Live harnesses (hit the real EvoMedis host, never part of `npm test`):
 
@@ -159,7 +157,7 @@ node --import tsx scripts/pilot-live-write.ts                              # gua
 - **No Docker** (no Dockerfile/compose). **No bundler except Vite**, and Vite is used for the UI and dev server only; the orchestrator runs unbundled through `tsx` (`node --import tsx src/main.ts`).
 - **No codegen, no migrations, no seeding** — the only persistence is the append-only JSONL ledger. PostgreSQL is explicitly deferred.
 - TypeScript is strict: `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride`, `noFallthroughCasesInSwitch`, `verbatimModuleSyntax`, `isolatedModules`; `moduleResolution: Bundler`.
-- Build order follows tsconfig `references` (`tsc -b` per package): `workflow-core → audit-ledger → evomedis-client → {domain-ranap, domain-rajal, test-fixtures}`, then apps. Package output goes to `packages/*/dist`.
+- Build order follows tsconfig `references` (`tsc -b` per package): `workflow-core → audit-ledger → evomedis-client → {domain-ranap, domain-rajal} → {test-fixtures, api-contract}`, then apps. Package output goes to `packages/*/dist`.
 - Ports: orchestrator `4500` (bind `127.0.0.1`), UI dev `5173` (strictPort, proxies `/api`), livetest smoke `4711`, mock login server `4799`.
 - One Windows host may serve the built UI and the orchestrator on a single port via `UI_DIR` + `@fastify/static`.
 
