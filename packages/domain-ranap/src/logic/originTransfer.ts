@@ -52,17 +52,17 @@ export interface OriginTransferPolicy {
    */
   readonly nothingPending: 'settled' | 'skip';
   /**
-   * Fall back to the source row's `kd_detkelpenjamin` before the `'15'`
-   * default when the destination has none.
+   * `kd_unit` sent when the source row has none.
    *
-   * IGD `false`: `data_transaksi.get("kd_detkelpenjamin", "15")`
-   * (ranap_v3.py:9220).
-   * POLI `true`: a port addition (introduced with the live-write pilot
-   * safeguards); the Python reads only `linked.kd_detkelpenjamin or "15"`
-   * (ranap_v3.py:7578). Kept because changing the payload of a live write is
-   * out of scope for a refactor — see the drift note in the refactor commit.
+   * IGD `''`: `source_kd_unit` is passed as read (ranap_v3.py:9257).
+   * POLI `'0'`: `kd_unit=kd_unit_source or "0"` (ranap_v3.py:7628).
+   *
+   * Both read `kd_detkelpenjamin` from the destination only, defaulting to
+   * `'15'` (IGD ranap_v3.py:9220, POLI ranap_v3.py:7578). The POLI fallback to
+   * the source row that the live-write pilot added had no legacy basis and was
+   * removed.
    */
-  readonly kdDetkelpenjaminFromSource: boolean;
+  readonly sourceKdUnitFallback: string;
   /** Add the human-readable `perubahan` line to the payload summary (POLI only today). */
   readonly describeChange: boolean;
 }
@@ -72,7 +72,7 @@ export const IGD_TRANSFER_POLICY: OriginTransferPolicy = {
   summaryPrefix: 'igd',
   checkPendingBeforeDestination: false,
   nothingPending: 'settled',
-  kdDetkelpenjaminFromSource: false,
+  sourceKdUnitFallback: '',
   describeChange: false,
 };
 
@@ -81,7 +81,7 @@ export const POLI_TRANSFER_POLICY: OriginTransferPolicy = {
   summaryPrefix: 'poli',
   checkPendingBeforeDestination: true,
   nothingPending: 'skip',
-  kdDetkelpenjaminFromSource: true,
+  sourceKdUnitFallback: '0',
   describeChange: true,
 };
 
@@ -186,10 +186,7 @@ export function decideOriginTransfer(
   if (kdTindakanList.length === 0) return nothingPending;
   if (!facts.biaya.trim()) return { verdict: 'missing', reason: `biaya transfer ${label} kosong` };
 
-  const kdDetkelpenjamin =
-    str(facts.destination, 'kd_detkelpenjamin') ||
-    (policy.kdDetkelpenjaminFromSource ? str(facts.source, 'kd_detkelpenjamin') : '') ||
-    '15';
+  const kdDetkelpenjamin = str(facts.destination, 'kd_detkelpenjamin') || '15';
   const { biaya } = facts;
   const prefix = policy.summaryPrefix;
   const payloadSummary: Record<string, unknown> = {
@@ -216,7 +213,7 @@ export function decideOriginTransfer(
       kdDetkelpenjamin,
       biaya,
       // The source unit itself, not the destination's (ranap_v3.py:9257).
-      kdUnit: str(facts.source, 'kd_unit'),
+      kdUnit: str(facts.source, 'kd_unit') || policy.sourceKdUnitFallback,
       // "format sesuai HAR: 38','16','1929…" — the legacy comment at
       // ranap_v3.py:9201. One code stays a bare code, no separator.
       kdTindakan: kdTindakanList.join("','"),

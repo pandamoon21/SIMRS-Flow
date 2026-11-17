@@ -91,15 +91,21 @@ describe('decideOriginTransfer — shared plan shape', () => {
 });
 
 describe('decideOriginTransfer — IGD vs POLI policy differences', () => {
-  it('kd_detkelpenjamin: IGD goes destination → 15, POLI goes destination → source → 15', () => {
+  it('kd_detkelpenjamin: both read the destination only, then 15 (ranap_v3.py:7578, 9220)', () => {
     const igd = decideOriginTransfer(IGD_TRANSFER_POLICY, facts());
     const poli = decideOriginTransfer(POLI_TRANSFER_POLICY, facts());
     expect(igd.verdict === 'transfer' && igd.payload['Kd_DetKelPenjamin']).toBe('15');
-    expect(poli.verdict === 'transfer' && poli.payload['Kd_DetKelPenjamin']).toBe('7');
+    expect(poli.verdict === 'transfer' && poli.payload['Kd_DetKelPenjamin']).toBe('15');
+  });
 
-    const noSource = facts({ source: { no_transaksi: SOURCE_TRX, kd_unit: '1' } });
-    const poliDefault = decideOriginTransfer(POLI_TRANSFER_POLICY, noSource);
-    expect(poliDefault.verdict === 'transfer' && poliDefault.payload['Kd_DetKelPenjamin']).toBe('15');
+  it('kd_unit: a blank source unit stays blank for IGD, becomes 0 for POLI (ranap_v3.py:7628)', () => {
+    const noUnit = facts({ source: { no_transaksi: SOURCE_TRX, kd_detkelpenjamin: '7' } });
+    const igd = decideOriginTransfer(IGD_TRANSFER_POLICY, noUnit);
+    const poli = decideOriginTransfer(POLI_TRANSFER_POLICY, noUnit);
+    expect(igd.verdict === 'transfer' && igd.payload['kd_unit']).toBe('');
+    expect(poli.verdict === 'transfer' && poli.payload['kd_unit']).toBe('0');
+    const withUnit = decideOriginTransfer(POLI_TRANSFER_POLICY, facts());
+    expect(withUnit.verdict === 'transfer' && withUnit.payload['kd_unit']).toBe('302');
   });
 
   it('payload summary: igd_/poli_ keys, POLI adds the perubahan line', () => {

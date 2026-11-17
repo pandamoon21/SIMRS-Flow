@@ -4287,7 +4287,8 @@ export function createRanapExecutors(deps: RanapDeps): ExecutorRegistry {
         const range = getRoomGroupDateRange(rows);
         const biayaRows = rows
           .flatMap((row) => listByTrx[str(row, 'no_transaksi')] ?? [])
-          .filter((row) => upper(row, 'nama_tindakan').includes('BIAYA OBAT'));
+          // Exact match, as everywhere in ranap_v3.py (e.g. :5927, :12757).
+          .filter((row) => upper(row, 'nama_tindakan') === 'BIAYA OBAT');
         const biaya = await Promise.all(
           biayaRows.map(async (row) => buildBiayaObatDetailEntry(row, await fetchBiayaObatDetail(ctx, client, row))),
         );
